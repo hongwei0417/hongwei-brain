@@ -16,24 +16,24 @@ Integrated Git workflow plugin providing create-branch → commit → create-pr 
 
 ```bash
 /plugin marketplace add hongwei0417/hongwei-brain
-/plugin install moxa-workflow@hongwei-brain-marketplace
+/plugin install moxa@hongwei-brain-marketplace
 ```
 
 ## Usage
 
-### Main Command: `/git-flow`
+### Main Command: `/git-workflow`
 
 ```bash
 # Interactive selection mode
-/git-flow
+/git-workflow
 
 # Full flow mode
-/git-flow --full
+/git-workflow --full
 
 # Single step mode
-/git-flow --step create-branch
-/git-flow --step commit
-/git-flow --step create-pr
+/git-workflow --step create-branch
+/git-workflow --step commit
+/git-workflow --step create-pr
 ```
 
 ## Full Flow Mode
@@ -77,7 +77,7 @@ Create a new branch:
 
 ### Commit
 
-Commit changes (built-in `moxa-workflow:commit` skill):
+Commit changes (built-in `moxa:commit` skill):
 
 - Review and stage changes
 - Auto-determine whether to split into multiple commits
@@ -128,7 +128,7 @@ In `~/.claude/settings.json`:
 ### Complete Development Flow
 
 ```bash
-/git-flow --full
+/git-workflow --full
 
 # Phase 1: Collect settings
 # [Multi-select] Steps to execute: Branch, Commit, PR
@@ -150,19 +150,19 @@ In `~/.claude/settings.json`:
 
 ```bash
 # Only create branch
-/git-flow --step create-branch
+/git-workflow --step create-branch
 
 # Only commit
-/git-flow --step commit
+/git-workflow --step commit
 
 # Only create PR (specify target branch)
-/git-flow --step create-pr
+/git-workflow --step create-pr
 ```
 
 ## Plugin Structure
 
 ```
-moxa-workflow/
+moxa/
 ├── .claude-plugin/plugin.json
 ├── README.md
 ├── commands/

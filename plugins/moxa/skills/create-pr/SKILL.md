@@ -1,5 +1,5 @@
 ---
-name: moxa-workflow:create-pr
+name: moxa:create-pr
 description: Create GitLab Merge Request with automatic fork detection. Handles both same-project MR and cross-project MR (fork to upstream). Supports custom target branch selection. Triggers on "create pr", "create mr", "merge request", "submit pr", or "push and create pr".
 ---
 

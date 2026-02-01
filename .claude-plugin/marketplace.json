@@ -11,8 +11,8 @@
 	},
 	"plugins": [
 		{
-			"name": "moxa-workflow",
-			"source": "./plugins/moxa-workflow",
+			"name": "moxa",
+			"source": "./plugins/moxa",
 			"description": "Integrated Git workflow plugin providing create-branch → commit → create-pr flow with fork cross-project MR support",
 			"version": "1.0.0",
 			"keywords": ["git", "workflow", "branch", "commit", "pr", "gitlab", "moxa"]

@@ -1,5 +1,5 @@
 ---
-name: moxa-workflow:create-branch
+name: moxa:create-branch
 description: Create a new git branch with optional worktree setup. Use when needing to start new feature development, create fix branches, or set up parallel working directories. Triggers on "create branch", "new branch", "worktree", or "start feature".
 ---
 

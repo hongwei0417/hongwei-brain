@@ -1,5 +1,5 @@
 ---
-name: moxa-workflow:commit
+name: moxa:commit
 allowed-tools: Bash(git add:*), Bash(git status:*), Bash(git commit:*), Bash(git diff:*), Bash(git log:*)
 description: Create well-structured git commits with automatic splitting analysis. Use when committing changes, creating commits, or needing to decide whether to split changes into multiple commits. Triggers on "commit changes", "create commit", "stage and commit", or "commit work".
 ---

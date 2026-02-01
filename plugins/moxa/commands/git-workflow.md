@@ -72,17 +72,17 @@ description: Integrated Git workflow completing create-branch → commit → cre
 根據第一階段收集的設定，依序執行所選步驟，中間不會停止：
 
 **1. Create Branch（如果選擇）**
-- 觸發 `moxa-workflow:create-branch` skill
+- 觸發 `moxa:create-branch` skill
 - 使用第一階段收集的設定
 - 完成後立即進入下一步
 
 **2. Commit（如果選擇）**
-- 觸發 `moxa-workflow:commit` skill
+- 觸發 `moxa:commit` skill
 - 該技能會自動判斷是否需要切分成多個 commit 或合併為一個
 - 完成後立即進入下一步
 
 **3. Create PR（如果選擇）**
-- 觸發 `moxa-workflow:create-pr` skill
+- 觸發 `moxa:create-pr` skill
 - 使用第一階段收集的目標 remote 和目標分支設定
 
 ### 第三階段：報告結果
@@ -117,34 +117,34 @@ description: Integrated Git workflow completing create-branch → commit → cre
 
 | 步驟 | Skill | 備註 |
 |------|-------|------|
-| Create Branch | `moxa-workflow:create-branch` | 建立分支並可選 worktree |
-| Commit | `moxa-workflow:commit` | 自動判斷 commit 切分策略 |
-| Create PR | `moxa-workflow:create-pr` | 支援 fork 跨專案 MR |
+| Create Branch | `moxa:create-branch` | 建立分支並可選 worktree |
+| Commit | `moxa:commit` | 自動判斷 commit 切分策略 |
+| Create PR | `moxa:create-pr` | 支援 fork 跨專案 MR |
 
 ## 使用範例
 
 ```bash
 # 互動式選擇模式
-/git-flow
+/git-workflow
 
 # 全流程模式（先問設定，再一次執行）
-/git-flow --full
+/git-workflow --full
 
 # 單一任務：建立分支
-/git-flow --step create-branch
+/git-workflow --step create-branch
 
 # 單一任務：提交
-/git-flow --step commit
+/git-workflow --step commit
 
 # 單一任務：建立 PR
-/git-flow --step create-pr
+/git-workflow --step create-pr
 ```
 
 ## 流程圖
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      /git-flow --full                    │
+│                      /git-workflow --full                    │
 └─────────────────────┬───────────────────────────────────┘
                       │
          ┌────────────▼────────────┐
