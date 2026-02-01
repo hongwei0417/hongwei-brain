@@ -1,0 +1,19 @@
+{
+	"name": "moxa-workflow",
+	"version": "1.0.0",
+	"description": "Integrated Git workflow plugin providing create-branch → commit → create-pr flow with fork cross-project MR support",
+	"author": {
+		"name": "Kevin Hu",
+		"email": "iamhongwei0417@gmail.com"
+	},
+	"homepage": "https://github.com/hongwei0417/hongwei-brain",
+	"repository": "https://github.com/hongwei0417/hongwei-brain",
+	"license": "MIT",
+	"keywords": ["git", "workflow", "branch", "commit", "pr", "gitlab", "moxa"],
+	"commands": ["./commands/git-flow.md"],
+	"skills": [
+		"./skills/create-branch/SKILL.md",
+		"./skills/commit/SKILL.md",
+		"./skills/create-pr/SKILL.md"
+	]
+}
