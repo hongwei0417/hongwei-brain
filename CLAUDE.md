@@ -43,14 +43,14 @@ The moxa plugin provides a three-phase Git workflow: **create-branch → commit 
   - `moxa:commit` — Analyzes changes, decides single vs. multi-commit strategy, uses conventional commits
   - `moxa:create-pr` — Detects fork scenarios, creates GitLab MRs (same-project via MCP, cross-project via API)
 
-- **`/sync-branches`** — Cherry-pick sync commits to other branches:
-  - `--keyword <search>` — Search branches by keyword (e.g., `mds`, `switch`)
-  - No args — Interactive mode asking for keyword
-  - Flow: search branches → select targets → compare commits → confirm → cherry-pick + create MRs
+- **`/sync-branches`** — Cherry-pick sync commits to a target branch:
+  - `<target-branch>` — Specify the target branch name directly
+  - No args — Interactive mode asking for target branch name
+  - Flow: validate branch → compare commits → confirm → cherry-pick + create MR
 
 - **Additional Skills:**
-  - `moxa:scan-branches` — Searches remote branches by keyword, compares commits, filters non-functional commits
-  - `moxa:cherry-pick-sync` — Executes cherry-pick to sync branches, creates `sync/<source>-to-<target>` branches, handles conflicts
+  - `moxa:scan-branches` — Validates target remote branch, compares commits, filters non-functional commits
+  - `moxa:cherry-pick-sync` — Executes cherry-pick to a single target branch, creates `sync/<source>-to-<target>` branch, handles conflicts
 
 Cross-project MR creation requires a `GITLAB_PERSONAL_ACCESS_TOKEN` set via environment variable or `~/.claude/settings.json`.
 

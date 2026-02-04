@@ -1,20 +1,19 @@
 ---
 name: moxa:scan-branches
-allowed-tools: Bash(git:*), Bash(grep:*), Bash(ls:*), Bash(basename:*), AskUserQuestion
-description: Scan and compare remote branches for cherry-pick sync. Searches branches by keyword (project names from apps/switch or switch-related names), compares commits between current branch and target branches, and filters out non-functional commits. Triggers on "scan branches", "compare branches", "find branches to sync", or "branch diff".
+allowed-tools: Bash(git:*), Bash(grep:*), AskUserQuestion
+description: Validate a target remote branch and compare commits for cherry-pick sync. Verifies the branch exists on remote, compares commits between current branch and target branch, and filters out non-functional commits. Triggers on "scan branches", "compare branches", "find branches to sync", or "branch diff".
 ---
 
 # Scan Branches Skill
 
 ## Overview
 
-搜尋遠端分支並比對 commits 差異，用於 cherry-pick sync 工作流程。支援以關鍵字搜尋 apps/switch 專案相關分支，比較當前分支與目標分支的 commit 差異，並自動過濾非功能性 commits。
+驗證目標遠端分支並比對 commits 差異，用於 cherry-pick sync 工作流程。接收指定的分支名稱，驗證其存在於 remote，比較當前分支與目標分支的 commit 差異，並自動過濾非功能性 commits。
 
 ## When to Use
 
-- 需要找出哪些分支缺少當前分支的 commits
-- 搜尋 switch 相關專案分支
-- 比對分支間的 commit 差異
+- 需要確認目標分支存在並比對 commits 差異
+- 比對當前分支與特定目標分支的 commit 差異
 - 準備 cherry-pick sync 前的分析
 
 ## Process
@@ -39,62 +38,23 @@ echo "使用 Remote: $REMOTE"
 git fetch $REMOTE --prune
 ```
 
-### 3. 搜尋分支
+### 3. 驗證目標分支
 
-#### 3a. 有指定關鍵字時
-
-直接使用該關鍵字搜尋：
+確認指定的分支名稱存在於 remote：
 
 ```bash
-git branch -r | grep "$REMOTE/" | grep -v HEAD | grep -i "<keyword>"
+# 檢查分支是否存在（支援帶或不帶 remote 前綴的名稱）
+git branch -r | grep "$REMOTE/" | grep -v HEAD | grep "<target-branch>"
 ```
 
-#### 3b. 無指定關鍵字時（預設行為）
+**如果分支不存在：**
+- 通知使用者該分支不存在
+- 列出類似名稱的分支供參考
+- 使用 AskUserQuestion 詢問正確的分支名稱
 
-自動從 `apps/switch/` 目錄取得專案名稱，並搜尋 `switch` 相關分支：
+### 4. 比對 Commits
 
-```bash
-# Step 1: 掃描 apps/switch/ 底下的專案目錄名稱
-# 例如：mds-g4000, eis-series, sds-100 等
-PROJECT_NAMES=$(ls -d apps/switch/*/ 2>/dev/null | xargs -I {} basename {})
-
-# Step 2: 用每個專案名稱作為關鍵字搜尋遠端分支
-for NAME in $PROJECT_NAMES; do
-  git branch -r | grep "$REMOTE/" | grep -v HEAD | grep -i "$NAME"
-done
-
-# Step 3: 同時搜尋包含 switch 關鍵字的分支
-git branch -r | grep "$REMOTE/" | grep -v HEAD | grep -i "switch"
-
-# Step 4: 合併所有結果並去重
-# 將 Step 2 + Step 3 的結果合併，排除重複項目
-```
-
-**搜尋策略：**
-- 預設自動掃描 `apps/switch/` 底下的專案名稱作為搜尋關鍵字
-- 同時搜尋包含 `switch` 關鍵字的分支
-- 合併去重後排除 HEAD 指標
-- 關鍵字不區分大小寫
-- 排除當前分支本身
-
-### 4. 列出分支供選擇
-
-使用 AskUserQuestion 讓使用者選擇要比對的分支（支援多選）：
-
-```
-找到以下符合的遠端分支：
-
-□ switch-mds-g4000
-□ switch-mds-g4100
-□ switch-eis-series
-□ ...
-
-請選擇要比對的分支（可多選）：
-```
-
-### 5. 比對 Commits
-
-對每個選擇的目標分支，比對當前分支的 commits 差異：
+比對當前分支與目標分支的 commits 差異：
 
 ```bash
 # 取得當前分支名稱
@@ -110,7 +70,7 @@ git log --cherry-pick --right-only --no-merges --oneline $REMOTE/<target-branch>
 - 使用 `--right-only` 只顯示當前分支獨有的 commits
 - 使用 `--no-merges` 排除 merge commits
 
-### 6. 過濾非功能性 Commits
+### 5. 過濾非功能性 Commits
 
 自動排除以下類型的 commits：
 
@@ -132,9 +92,9 @@ git log --cherry-pick --right-only --no-merges --oneline $REMOTE/<target>...$CUR
 - `chore(release): ...` — release 相關 chore commits
 - `v1.0.0` 等版本號開頭的 commits
 
-### 7. 輸出結果
+### 6. 輸出結果
 
-以結構化方式呈現每個目標分支的差異 commits：
+以結構化方式呈現目標分支的差異 commits：
 
 ```
 ## 分支比對結果
@@ -145,19 +105,18 @@ git log --cherry-pick --right-only --no-merges --oneline $REMOTE/<target>...$CUR
   ghi9012 refactor: optimize query
   jkl3456 feat(ui): add dashboard
   mno7890 fix(core): memory leak
+```
 
-### switch-mds-g4100 (3 commits 需要同步)
-  abc1234 feat(api): add new endpoint
-  def5678 fix(auth): fix login issue
-  ghi9012 refactor: optimize query
-
-### switch-eis-series (0 commits - 已同步)
+如果沒有差異 commits：
+```
+### switch-mds-g4000 (0 commits - 已同步)
   ✓ 所有 commits 已同步
 ```
 
 ## Integration Note
 
 當被 `/sync-branches` 命令呼叫時：
-- 接收關鍵字參數用於分支搜尋
-- 回傳結構化的分支與 commits 差異資訊
+- 接收目標分支名稱
+- 驗證分支存在於 remote
+- 回傳結構化的 commits 差異資訊
 - 後續交由 `moxa:cherry-pick-sync` skill 執行同步

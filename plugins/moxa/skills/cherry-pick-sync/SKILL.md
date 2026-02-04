@@ -1,7 +1,7 @@
 ---
 name: moxa:cherry-pick-sync
 allowed-tools: Bash(git:*), AskUserQuestion, Skill
-description: Execute cherry-pick sync from current branch to target branches. Creates sync branches, cherry-picks selected commits, handles conflicts by stopping and notifying, and triggers MR creation. Triggers on "cherry-pick sync", "sync commits", "cherry-pick to branches", or "sync branches".
+description: Execute cherry-pick sync from current branch to a target branch. Creates a sync branch, cherry-picks selected commits, handles conflicts by stopping and notifying, and triggers MR creation. Triggers on "cherry-pick sync", "sync commits", "cherry-pick to branch", or "sync branch".
 ---
 
 # Cherry-Pick Sync Skill
@@ -12,8 +12,8 @@ description: Execute cherry-pick sync from current branch to target branches. Cr
 
 ## When to Use
 
-- 需要將當前分支的 commits 同步到其他分支
-- Cherry-pick 多個 commits 到多個目標分支
+- 需要將當前分支的 commits 同步到另一個分支
+- Cherry-pick 多個 commits 到一個目標分支
 - 建立 sync MR
 
 ## Process
@@ -21,7 +21,7 @@ description: Execute cherry-pick sync from current branch to target branches. Cr
 ### 1. 接收參數
 
 從 `/sync-branches` 命令接收：
-- 目標分支清單及各分支對應的 commits
+- 目標分支名稱及對應的 commits
 - 來源分支名稱
 - Remote 名稱
 
@@ -33,11 +33,7 @@ ORIGINAL_BRANCH=$(git branch --show-current)
 REMOTE="<detected remote>"
 ```
 
-### 3. 對每個目標分支執行 Cherry-Pick
-
-依序處理每個目標分支：
-
-#### 3.1 建立 Sync 分支
+### 3. 建立 Sync 分支
 
 ```bash
 TARGET_BRANCH="<target-branch>"
@@ -52,9 +48,9 @@ git checkout -b "$SYNC_BRANCH" "$REMOTE/$TARGET_BRANCH"
 
 **如果分支已存在：**
 - 通知使用者分支已存在
-- 詢問是否刪除重建或跳過該分支
+- 詢問是否刪除重建或跳過
 
-#### 3.2 執行 Cherry-Pick
+### 4. 執行 Cherry-Pick
 
 逐一 cherry-pick 選定的 commits：
 
@@ -65,7 +61,7 @@ for COMMIT_HASH in <commits-oldest-to-newest>; do
 done
 ```
 
-#### 3.3 衝突處理
+### 5. 衝突處理
 
 **遇到 conflict 時立即停止：**
 
@@ -83,7 +79,6 @@ if ! git cherry-pick "$COMMIT_HASH"; then
   echo "Cherry-pick 衝突！"
   echo "衝突 commit: $COMMIT_HASH"
   echo "目標分支: $TARGET_BRANCH"
-  echo "已中止此分支的同步，繼續處理下一個分支"
 fi
 ```
 
@@ -101,7 +96,7 @@ fi
 3. 解決衝突後 git cherry-pick --continue
 ```
 
-#### 3.4 Push Sync 分支
+### 6. Push Sync 分支
 
 Cherry-pick 全部成功後推送到 origin（使用者自己的 remote，即使分支是基於 upstream 建立的）：
 
@@ -110,7 +105,7 @@ Cherry-pick 全部成功後推送到 origin（使用者自己的 remote，即使
 git push -u origin "$SYNC_BRANCH"
 ```
 
-#### 3.5 建立 MR
+### 7. 建立 MR
 
 使用 `moxa:create-pr` skill 建立 MR，傳入以下設定：
 
@@ -136,35 +131,32 @@ git push -u origin "$SYNC_BRANCH"
 *由 moxa sync-branches 自動建立*
 ```
 
-### 4. 切回原始分支
-
-所有目標分支處理完畢後：
+### 8. 切回原始分支
 
 ```bash
 git checkout "$ORIGINAL_BRANCH"
 ```
 
-### 5. 綜合報告
+### 9. 結果報告
 
+**成功時：**
 ```
 ## Cherry-Pick Sync 結果
 
-### ✅ 成功同步
+✅ 同步成功
 | 目標分支 | Sync 分支 | Commits | MR |
 |----------|-----------|---------|-----|
 | switch-mds-g4000 | sync/feature-x-to-switch-mds-g4000 | 5 | !123 |
-| switch-mds-g4100 | sync/feature-x-to-switch-mds-g4100 | 3 | !124 |
+```
 
-### ❌ 同步失敗（衝突）
+**失敗時：**
+```
+## Cherry-Pick Sync 結果
+
+❌ 同步失敗（衝突）
 | 目標分支 | 衝突 Commit | 需手動處理 |
 |----------|-------------|-----------|
-| switch-eis | abc1234 feat(api): add new endpoint | 是 |
-
-### 📊 統計
-- 總計目標分支: 3
-- 成功: 2
-- 失敗: 1
-- 已建立 MR: 2
+| switch-mds-g4000 | abc1234 feat(api): add new endpoint | 是 |
 ```
 
 ## Safety Checks
@@ -191,14 +183,13 @@ git checkout "$ORIGINAL_BRANCH"
 ```
 
 **MR 建立失敗：**
-- 記錄錯誤但繼續處理下一個分支
-- 在最終報告中標示 MR 建立失敗的分支
+- 記錄錯誤並在結果報告中標示
 
 ## Integration Note
 
 當被 `/sync-branches` 命令呼叫時：
 - 接收 `moxa:scan-branches` 的分析結果
 - 使用者已確認的 commits 清單
-- 依序處理每個目標分支
+- 處理單一目標分支
 - 呼叫 `moxa:create-pr` 建立 MR
-- 回傳綜合結果報告
+- 回傳結果報告
