@@ -43,14 +43,21 @@ The moxa plugin provides a three-phase Git workflow: **create-branch → commit 
   - `moxa:commit` — Analyzes changes, decides single vs. multi-commit strategy, uses conventional commits
   - `moxa:create-pr` — Detects fork scenarios, creates GitLab MRs (same-project via MCP, cross-project via API)
 
+- **`/sync-from`** — One-way sync from a source branch to target branches:
+  - `<source> <target1> [target2...]` — First arg is source, rest are targets
+  - No args — Interactive mode asking for source and target branches
+  - Flow: one-way comparison (source → each target) → show report → confirm → cherry-pick + create MRs
+  - Sync branch naming: `sync/from-<source>-to-<target>`
+
 - **`/sync-branches`** — Multi-directional sync across multiple branches:
   - `<branch1> <branch2> [branch3...]` — Specify branch names (all branches are equal peers)
   - No args — Interactive mode asking for branch names
   - Flow: pairwise comparison of all branches → aggregate missing commits per branch with source annotations → show sync status report → confirm → cherry-pick + create MRs
 
 - **Additional Skills:**
+  - `moxa:scan-from-branch` — Compares a single source branch against multiple targets one-way to find missing commits per target
   - `moxa:scan-branches` — Compares all input branches pairwise to find missing commits per branch, deduplicates by commit hash, annotates source branches
-  - `moxa:cherry-pick-sync` — Cherry-picks aggregated commits (from multiple sources) to a single target branch, creates `sync/to-<target>` branch, handles conflicts (called per branch)
+  - `moxa:cherry-pick-sync` — Cherry-picks aggregated commits to a single target branch, creates sync branch, handles conflicts (called per branch)
 
 Cross-project MR creation requires a `GITLAB_PERSONAL_ACCESS_TOKEN` set via environment variable or `~/.claude/settings.json`.
 

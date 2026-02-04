@@ -12,13 +12,15 @@
 	"keywords": ["git", "workflow", "branch", "commit", "pr", "gitlab", "moxa", "cherry-pick", "sync"],
 	"commands": [
 		"./commands/git-workflow.md",
-		"./commands/sync-branches.md"
+		"./commands/sync-branches.md",
+		"./commands/sync-from.md"
 	],
 	"skills": [
 		"./skills/create-branch/SKILL.md",
 		"./skills/commit/SKILL.md",
 		"./skills/create-pr/SKILL.md",
 		"./skills/scan-branches/SKILL.md",
-		"./skills/cherry-pick-sync/SKILL.md"
+		"./skills/cherry-pick-sync/SKILL.md",
+		"./skills/scan-from-branch/SKILL.md"
 	]
 }

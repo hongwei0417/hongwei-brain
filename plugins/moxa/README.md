@@ -9,6 +9,8 @@ Integrated Git workflow plugin providing create-branch → commit → create-pr 
 - **Flexible Target Branch**: Create PR supports selecting any target branch
 - **Fork Support**: Auto-detect fork scenarios, support cross-project MR
 - **GitLab Integration**: Via GitLab MCP and direct API operations
+- **One-Way Sync**: Cherry-pick commits from a source branch to multiple target branches
+- **Multi-Directional Sync**: Pairwise comparison across multiple equal-status branches
 
 ## Installation
 
@@ -159,6 +161,35 @@ In `~/.claude/settings.json`:
 /git-workflow --step create-pr
 ```
 
+## Sync Commands
+
+### One-Way Sync: `/sync-from`
+
+```bash
+# From source branch to multiple targets
+/sync-from switch-mds-g4000 switch-mds-g4100 switch-eis-series
+
+# From source to single target
+/sync-from switch-mds-g4000 switch-mds-g4100
+
+# Interactive mode
+/sync-from
+```
+
+Flow: source → scan each target → show report → cherry-pick + MR per target
+
+### Multi-Directional Sync: `/sync-branches`
+
+```bash
+# All branches compared pairwise
+/sync-branches switch-mds-g4000 switch-mds-g4100 switch-eis-series
+
+# Interactive mode
+/sync-branches
+```
+
+Flow: pairwise comparison → aggregate missing commits → cherry-pick + MR per branch
+
 ## Plugin Structure
 
 ```
@@ -166,16 +197,22 @@ moxa/
 ├── .claude-plugin/plugin.json
 ├── README.md
 ├── commands/
-│   └── git-flow.md              # Integrated main command
+│   ├── git-workflow.md          # Integrated main command
+│   ├── sync-branches.md         # Multi-directional sync command
+│   └── sync-from.md             # One-way sync command
 └── skills/
     ├── create-branch/
     │   └── SKILL.md             # Create branch skill
     ├── commit/
     │   └── SKILL.md             # Commit workflow (built-in)
-    └── create-pr/
-        ├── SKILL.md             # Create PR skill
-        └── scripts/
-            └── gitlab-cross-project-mr.sh
+    ├── create-pr/
+    │   └── SKILL.md             # Create PR skill
+    ├── scan-branches/
+    │   └── SKILL.md             # Multi-directional branch comparison
+    ├── scan-from-branch/
+    │   └── SKILL.md             # One-way branch comparison
+    └── cherry-pick-sync/
+        └── SKILL.md             # Cherry-pick sync execution
 ```
 
 ## Dependencies

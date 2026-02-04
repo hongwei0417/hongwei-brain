@@ -40,8 +40,9 @@ REMOTE="<detected remote>"
 ```bash
 TARGET_BRANCH="<target-branch>"
 
-# 分支命名格式：sync/to-<target>（因為來源是多個分支）
-SYNC_BRANCH="sync/to-${TARGET_BRANCH}"
+# 預設分支命名格式：sync/to-<target>
+# 呼叫者可指定自訂分支名稱（如 /sync-from 使用 sync/from-<source>-to-<target>）
+SYNC_BRANCH="${CUSTOM_SYNC_BRANCH:-sync/to-${TARGET_BRANCH}}"
 
 # 基於目標分支的最新狀態建立 sync 分支
 git checkout -b "$SYNC_BRANCH" "$REMOTE/$TARGET_BRANCH"
@@ -195,3 +196,9 @@ git checkout "$ORIGINAL_BRANCH"
 - 處理單一目標分支（多個分支時會被逐一呼叫）
 - 呼叫 `moxa:create-pr` 建立 MR
 - 回傳結果報告供 `/sync-branches` 彙整綜合報告
+
+當被 `/sync-from` 命令呼叫時：
+- 接收 `moxa:scan-from-branch` 的分析結果中，單一目標分支的資料
+- Commits 全部來自同一個來源分支
+- 使用自訂 sync 分支名稱：`sync/from-<source>-to-<target>`
+- 其餘流程相同（cherry-pick → push → create MR）
