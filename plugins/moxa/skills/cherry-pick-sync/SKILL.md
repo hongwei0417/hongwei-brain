@@ -188,8 +188,8 @@ git checkout "$ORIGINAL_BRANCH"
 ## Integration Note
 
 當被 `/sync-branches` 命令呼叫時：
-- 接收 `moxa:scan-branches` 的分析結果
+- 接收 `moxa:scan-branches` 的分析結果中，單一目標分支的資料
 - 使用者已確認的 commits 清單
-- 處理單一目標分支
+- 處理單一目標分支（多個分支時會被逐一呼叫）
 - 呼叫 `moxa:create-pr` 建立 MR
-- 回傳結果報告
+- 回傳結果報告供 `/sync-branches` 彙整綜合報告
