@@ -1,19 +1,21 @@
 ---
 name: moxa:cherry-pick-sync
 allowed-tools: Bash(git:*), AskUserQuestion, Skill
-description: Execute cherry-pick sync from current branch to a target branch. Creates a sync branch, cherry-picks selected commits, handles conflicts by stopping and notifying, and triggers MR creation. Triggers on "cherry-pick sync", "sync commits", "cherry-pick to branch", or "sync branch".
+description: Execute cherry-pick sync of aggregated commits from multiple source branches to a single target branch. Creates a sync branch, cherry-picks commits in chronological order, handles conflicts by stopping and notifying, and triggers MR creation. Triggers on "cherry-pick sync", "sync commits", "cherry-pick to branch", or "sync branch".
 ---
 
 # Cherry-Pick Sync Skill
 
 ## Overview
 
-執行 cherry-pick 同步作業：基於目標分支建立 sync 分支，cherry-pick 選定的 commits，處理衝突（停止並通知），並建立 GitLab MR。
+執行 cherry-pick 同步作業：接收一個目標分支及來自多個來源分支的聚合 commits 清單，基於目標分支建立 sync 分支，cherry-pick 選定的 commits，處理衝突（停止並通知），並建立 GitLab MR。
+
+**注意：** 此技能處理來自多個來源分支的聚合 commits，不假設單一來源分支。
 
 ## When to Use
 
-- 需要將當前分支的 commits 同步到另一個分支
-- Cherry-pick 多個 commits 到一個目標分支
+- 需要將來自多個分支的 commits 同步到一個目標分支
+- Cherry-pick 聚合 commits 到一個目標分支
 - 建立 sync MR
 
 ## Process
@@ -21,8 +23,8 @@ description: Execute cherry-pick sync from current branch to a target branch. Cr
 ### 1. 接收參數
 
 從 `/sync-branches` 命令接收：
-- 目標分支名稱及對應的 commits
-- 來源分支名稱
+- 目標分支名稱
+- 聚合 commits 清單（每個 commit 包含 hash、message、來源分支）
 - Remote 名稱
 
 ### 2. 記錄當前狀態
@@ -37,10 +39,9 @@ REMOTE="<detected remote>"
 
 ```bash
 TARGET_BRANCH="<target-branch>"
-SOURCE_BRANCH="$ORIGINAL_BRANCH"
 
-# 分支命名格式：sync/<source>-to-<target>
-SYNC_BRANCH="sync/${SOURCE_BRANCH}-to-${TARGET_BRANCH}"
+# 分支命名格式：sync/to-<target>（因為來源是多個分支）
+SYNC_BRANCH="sync/to-${TARGET_BRANCH}"
 
 # 基於目標分支的最新狀態建立 sync 分支
 git checkout -b "$SYNC_BRANCH" "$REMOTE/$TARGET_BRANCH"
@@ -55,7 +56,7 @@ git checkout -b "$SYNC_BRANCH" "$REMOTE/$TARGET_BRANCH"
 逐一 cherry-pick 選定的 commits：
 
 ```bash
-# 依照 commit 順序（從最舊到最新）執行
+# 依照 commit 時間順序（從最舊到最新）執行
 for COMMIT_HASH in <commits-oldest-to-newest>; do
   git cherry-pick "$COMMIT_HASH"
 done
@@ -86,12 +87,12 @@ fi
 ```
 ⚠️ Cherry-pick 衝突
 
-分支: switch-mds-g4000
+分支: <target-branch>
 衝突 Commit: abc1234 feat(api): add new endpoint
 狀態: 已中止，sync 分支已刪除
 
 請手動處理：
-1. git checkout -b sync/<source>-to-<target> <remote>/<target>
+1. git checkout -b sync/to-<target> <remote>/<target>
 2. git cherry-pick <commit-hash>
 3. 解決衝突後 git cherry-pick --continue
 ```
@@ -110,22 +111,22 @@ git push -u origin "$SYNC_BRANCH"
 使用 `moxa:create-pr` skill 建立 MR，傳入以下設定：
 
 **MR 設定：**
-- Source branch: `sync/<source>-to-<target>`
+- Source branch: `sync/to-<target>`
 - Target branch: `<target-branch>`
-- Title: `sync: cherry-pick commits from <source> to <target>`
+- Title: `sync: cherry-pick commits to <target>`
 - Description: 固定格式模板
 
 **MR Description 模板：**
 ```markdown
 ## Sync Cherry-Pick
 
-從 `<source-branch>` 同步以下 commits 到 `<target-branch>`：
+同步以下 commits 到 `<target-branch>`：
 
-| Commit | Message |
-|--------|---------|
-| abc1234 | feat(api): add new endpoint |
-| def5678 | fix(auth): fix login issue |
-| ghi9012 | refactor: optimize query |
+| Commit | Message | Source |
+|--------|---------|--------|
+| abc1234 | feat(api): add new endpoint | branch-B |
+| def5678 | fix(auth): fix login issue | branch-C |
+| ghi9012 | refactor: optimize query | branch-A, branch-C |
 
 ---
 *由 moxa sync-branches 自動建立*
@@ -146,7 +147,7 @@ git checkout "$ORIGINAL_BRANCH"
 ✅ 同步成功
 | 目標分支 | Sync 分支 | Commits | MR |
 |----------|-----------|---------|-----|
-| switch-mds-g4000 | sync/feature-x-to-switch-mds-g4000 | 5 | !123 |
+| <target> | sync/to-<target> | 5 | !123 |
 ```
 
 **失敗時：**
@@ -156,7 +157,7 @@ git checkout "$ORIGINAL_BRANCH"
 ❌ 同步失敗（衝突）
 | 目標分支 | 衝突 Commit | 需手動處理 |
 |----------|-------------|-----------|
-| switch-mds-g4000 | abc1234 feat(api): add new endpoint | 是 |
+| <target> | abc1234 feat(api): add new endpoint | 是 |
 ```
 
 ## Safety Checks
@@ -178,7 +179,7 @@ git checkout "$ORIGINAL_BRANCH"
 **Push 失敗：**
 ```
 錯誤：Push 失敗
-分支: sync/<source>-to-<target>
+分支: sync/to-<target>
 請檢查網路連線和 remote 權限
 ```
 
@@ -188,7 +189,8 @@ git checkout "$ORIGINAL_BRANCH"
 ## Integration Note
 
 當被 `/sync-branches` 命令呼叫時：
-- 接收 `moxa:scan-branches` 的分析結果中，單一目標分支的資料
+- 接收 `moxa:scan-branches` 的分析結果中，單一目標分支的聚合資料
+- 聚合 commits 來自多個來源分支（含來源標註）
 - 使用者已確認的 commits 清單
 - 處理單一目標分支（多個分支時會被逐一呼叫）
 - 呼叫 `moxa:create-pr` 建立 MR

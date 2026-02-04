@@ -1,12 +1,14 @@
 ---
 allowed-tools: Bash(git:*), AskUserQuestion, Skill
 argument-hint: <branch1> <branch2> [branch3...]
-description: Compare commits across multiple branches and cherry-pick sync missing commits with automatic MR creation
+description: Multi-directional sync — compare commits across multiple branches pairwise and cherry-pick sync missing commits with automatic MR creation
 ---
 
-# Sync Branches - Cherry-Pick 同步工作流程
+# Sync Branches - 多向 Cherry-Pick 同步工作流程
 
-比對多個遠端分支與當前分支的 commits 差異，確保所有 commits 都已同步。對需要同步的分支逐一執行 cherry-pick 並建立 MR。
+多向比對多個遠端分支的 commits 差異，找出每個分支缺少的 commits 並標註來源。對需要同步的分支逐一執行 cherry-pick 並建立 MR。
+
+**所有輸入分支地位平等，互相比對。不依賴「當前分支」作為來源。**
 
 執行參數: $ARGUMENTS
 
@@ -23,9 +25,6 @@ description: Compare commits across multiple branches and cherry-pick sync missi
    - 如果有未提交的變更，提醒使用者先 commit 或 stash
    - 使用 `git status --short` 確認
 
-2. **檢查當前分支不是 main/master：**
-   - 確認當前分支是功能分支而非主分支
-
 ## 流程總覽
 
 ```
@@ -34,27 +33,32 @@ description: Compare commits across multiple branches and cherry-pick sync missi
 └───────────────────────┬──────────────────────────────────────┘
                         │
            ┌────────────▼────────────┐
-           │  Step 1: 比對各分支      │
-           │  驗證分支 + 比對 commits │
-           │  產出同步狀態報告        │
+           │  Step 1: 多向比對       │
+           │  A vs B, A vs C         │
+           │  B vs A, B vs C         │
+           │  C vs A, C vs B         │
+           │  → 聚合每個分支缺少的   │
+           │    commits + 去重標註   │
            └────────────┬────────────┘
                         │
            ┌────────────▼────────────┐
-           │  Step 2: 選擇同步目標    │
-           │  選擇要同步的分支        │
-           │  確認 commit 清單        │
+           │  Step 2: 展示同步報告   │
+           │  A 缺: X,Y (from B,C)  │
+           │  B 缺: Z (from A)      │
+           │  C: 已同步             │
+           │  → 使用者選擇/調整      │
            └────────────┬────────────┘
                         │
            ┌────────────▼────────────┐
-           │  Step 3: 逐一執行同步    │
-           │  Cherry-pick + 建立 MR   │
-           │  輸出綜合報告            │
+           │  Step 3: 逐一同步       │
+           │  Cherry-pick + 建立 MR  │
+           │  輸出綜合報告           │
            └─────────────────────────┘
 ```
 
 ## 執行步驟
 
-### Step 1: 比對各分支 Commits 差異
+### Step 1: 多向比對各分支 Commits 差異
 
 觸發 `moxa:scan-branches` skill。
 
@@ -70,7 +74,9 @@ description: Compare commits across multiple branches and cherry-pick sync missi
 - 偵測 remote（upstream 優先，否則 origin）
 - 執行 `git fetch` 更新遠端資訊
 - 驗證各分支存在於 remote
-- 逐一比對當前分支與各目標分支的 commits 差異
+- 對每個分支與所有其他分支進行 pairwise 比對
+- 聚合每個分支缺少的 commits，按 commit hash 去重
+- 標註每個 commit 的來源分支
 - 過濾非功能性 commits
 - 產出綜合同步狀態報告
 
@@ -81,20 +87,15 @@ description: Compare commits across multiple branches and cherry-pick sync missi
 ```
 ## 分支同步狀態報告
 
-來源分支: feature/my-feature
+### branch-A (3 commits 需要同步)
+  abc1234 feat(api): add endpoint          ← from branch-B
+  def5678 fix(auth): fix login             ← from branch-B, branch-C
+  ghi9012 refactor: optimize               ← from branch-C
 
-### switch-mds-g4000 (5 commits 需要同步)
-  1. abc1234 feat(api): add new endpoint
-  2. def5678 fix(auth): fix login issue
-  3. ghi9012 refactor: optimize query
-  4. jkl3456 feat(ui): add dashboard
-  5. mno7890 fix(core): memory leak
+### branch-B (1 commit 需要同步)
+  jkl3456 feat(ui): add dashboard          ← from branch-A
 
-### switch-mds-g4100 (2 commits 需要同步)
-  1. abc1234 feat(api): add new endpoint
-  2. jkl3456 feat(ui): add dashboard
-
-### switch-eis-series (0 commits - 已同步)
+### branch-C (0 commits - 已同步)
   ✓ 所有 commits 已同步
 
 ---
@@ -117,13 +118,13 @@ description: Compare commits across multiple branches and cherry-pick sync missi
 
 對每個需要同步的分支，觸發 `moxa:cherry-pick-sync` skill：
 
-- 逐一傳入目標分支與對應的 commits 清單
+- 逐一傳入目標分支與對應的聚合 commits 清單（含來源標註）
 - `moxa:cherry-pick-sync` 對每個分支會：
-  1. 基於目標分支建立 `sync/<source>-to-<target>` 分支
-  2. Cherry-pick commits（從最舊到最新）
+  1. 基於目標分支建立 `sync/to-<target>` 分支
+  2. Cherry-pick 聚合 commits（從最舊到最新）
   3. 衝突時中止並清理該分支，繼續處理下一個
   4. 成功後 push 分支
-  5. 呼叫 `moxa:create-pr` 建立 MR（固定格式模板）
+  5. 呼叫 `moxa:create-pr` 建立 MR（含來源分支標註的 commit 表格）
   6. 切回原始分支
 
 ### 綜合報告
@@ -136,8 +137,8 @@ description: Compare commits across multiple branches and cherry-pick sync missi
 ### ✅ 成功同步
 | 目標分支 | Sync 分支 | Commits | MR |
 |----------|-----------|---------|-----|
-| switch-mds-g4000 | sync/feature-x-to-switch-mds-g4000 | 5 | !123 |
-| switch-mds-g4100 | sync/feature-x-to-switch-mds-g4100 | 2 | !124 |
+| branch-A | sync/to-branch-A | 3 | !123 |
+| branch-B | sync/to-branch-B | 1 | !124 |
 
 ### ❌ 同步失敗（衝突）
 | 目標分支 | 衝突 Commit | 需手動處理 |
@@ -155,17 +156,17 @@ description: Compare commits across multiple branches and cherry-pick sync missi
 
 | 步驟 | Skill | 備註 |
 |------|-------|------|
-| 比對多分支差異 | `moxa:scan-branches` | 驗證分支、逐一比對 commits、過濾非功能 commits |
-| 執行 cherry-pick | `moxa:cherry-pick-sync` | 逐一分支 cherry-pick、建立 sync 分支、處理衝突 |
+| 多向比對分支差異 | `moxa:scan-branches` | 驗證分支、pairwise 比對 commits、去重標註來源、過濾非功能 commits |
+| 執行 cherry-pick | `moxa:cherry-pick-sync` | 逐一分支 cherry-pick 聚合 commits、建立 sync 分支、處理衝突 |
 | 建立 MR | `moxa:create-pr` | 建立 GitLab Merge Request |
 
 ## 使用範例
 
 ```bash
-# 比對多個分支
+# 多向比對三個分支（互相比對，找出各自缺少的 commits）
 /sync-branches switch-mds-g4000 switch-mds-g4100 switch-eis-series
 
-# 比對兩個分支
+# 比對兩個分支（互相比對）
 /sync-branches switch-mds-g4000 switch-mds-g4100
 
 # 互動模式（會詢問要比對的分支名稱）
@@ -174,9 +175,11 @@ description: Compare commits across multiple branches and cherry-pick sync missi
 
 ## 注意事項
 
-1. **工作目錄必須乾淨**：執行前需確保沒有未提交的變更
-2. **衝突處理**：遇到衝突會停止該分支的同步，繼續處理下一個分支
-3. **分支命名**：sync 分支使用 `sync/<source>-to-<target>` 格式
-4. **MR 格式**：使用固定模板，列出所有 cherry-pick 的 commits
-5. **安全性**：不會修改任何現有分支的 commits，僅建立新的 sync 分支
-6. **自動過濾**：自動排除 merge commits、release commits 等非功能性 commits
+1. **所有分支地位平等**：不依賴當前分支作為來源，所有輸入分支互相比對
+2. **工作目錄必須乾淨**：執行前需確保沒有未提交的變更
+3. **衝突處理**：遇到衝突會停止該分支的同步，繼續處理下一個分支
+4. **分支命名**：sync 分支使用 `sync/to-<target>` 格式（因來源為多個分支）
+5. **MR 格式**：使用固定模板，列出所有 cherry-pick 的 commits 及其來源分支
+6. **安全性**：不會修改任何現有分支的 commits，僅建立新的 sync 分支
+7. **自動過濾**：自動排除 merge commits、release commits 等非功能性 commits
+8. **去重機制**：相同 commit 出現在多個來源分支時只 cherry-pick 一次
