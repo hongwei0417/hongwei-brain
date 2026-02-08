@@ -215,10 +215,11 @@ git checkout "$ORIGINAL_BRANCH"
 
 - 確保工作目錄乾淨（無未提交的變更）
 - Cherry-pick 前確認 sync 分支名稱不衝突
-- 衝突時安全中止並清理，**不建立同步點 tag**
+- 衝突時安全中止並清理
 - 完成後一定切回原始分支
 - 不會修改任何現有分支的 commits
-- 同步點 tag 僅在 cherry-pick 全部成功且 push 完成後才建立
+- 同步點 tag 在所有 commits 成功 cherry-pick 並 push 完成、且 MR 成功建立後才建立（缺一不可）
+- 衝突解決後若所有 commits 成功上傳並建立 MR，仍需建立同步點 tag
 
 ## Error Handling
 
