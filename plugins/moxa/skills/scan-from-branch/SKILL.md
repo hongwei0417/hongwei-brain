@@ -39,6 +39,8 @@ echo "使用 Remote: $REMOTE"
 
 ```bash
 git fetch $REMOTE --prune
+# 同時拉取同步點 tags
+git fetch $REMOTE 'refs/tags/sync-point/*:refs/tags/sync-point/*' 2>/dev/null || true
 ```
 
 ### 3. 驗證各分支
@@ -57,12 +59,28 @@ git branch -r | grep "$REMOTE/" | grep -v HEAD | grep "<branch-name>"
 
 ### 4. 單向比對 Commits
 
-對每個目標分支 T，與來源分支 S 比對，找出 T 缺少的 commits：
+對每個目標分支 T，與來源分支 S 比對，找出 T 缺少的 commits。
+
+**首先檢查同步點 Tag：**
 
 ```bash
-# 找出來源分支 S 有但目標分支 T 沒有的 commits
-# 即：T 缺少的、來自 S 的 commits
-git log --cherry-pick --right-only --no-merges --oneline $REMOTE/T...$REMOTE/S
+# 檢查是否存在上次同步點 tag
+SYNC_TAG="sync-point/from-${S}-to-${T}"
+git fetch $REMOTE "refs/tags/${SYNC_TAG}:refs/tags/${SYNC_TAG}" 2>/dev/null
+
+if git rev-parse "$SYNC_TAG" &>/dev/null; then
+  # 有同步點：取得 tag 的 commit 日期，只比對此日期之後的 commits
+  SYNC_DATE=$(git log -1 --format=%cI "$SYNC_TAG")
+  echo "找到同步點 tag: $SYNC_TAG (${SYNC_DATE})"
+  echo "將從上次同步點之後開始比對"
+
+  git log --cherry-pick --right-only --no-merges --oneline \
+    --after="$SYNC_DATE" $REMOTE/$T...$REMOTE/$S
+else
+  # 無同步點：完整比對
+  echo "未找到同步點 tag，執行完整比對"
+  git log --cherry-pick --right-only --no-merges --oneline $REMOTE/$T...$REMOTE/$S
+fi
 ```
 
 **比對說明：**
@@ -70,11 +88,16 @@ git log --cherry-pick --right-only --no-merges --oneline $REMOTE/T...$REMOTE/S
 - 使用 `--right-only` 只顯示右側分支（S，即來源）獨有的 commits
 - 使用 `--no-merges` 排除 merge commits
 - 這表示：「來源 S 有但目標 T 沒有的 commits」= T 缺少的 commits
+- **有同步點 tag 時**：使用 `--after` 限制只比對同步點之後的 commits，大幅縮小搜尋範圍
+- **無同步點 tag 時**：回退到完整比對（相容舊行為）
 
 **範例（來源 A，目標 B, C）：**
 ```
-比對 A → B: B 缺少來自 A 的 commits → [commit1, commit2]
-比對 A → C: C 缺少來自 A 的 commits → [commit3]
+# 有同步點 tag sync-point/from-A-to-B（上次同步至 2025-01-15）
+比對 A → B: 只查找 2025-01-15 之後的 commits → [commit1, commit2]
+
+# 無同步點 tag
+比對 A → C: 完整比對 → [commit3]
 ```
 
 ### 5. 過濾非功能性 Commits
@@ -105,13 +128,16 @@ git log --cherry-pick --right-only --no-merges --oneline $REMOTE/T...$REMOTE/S \
 來源分支: <source-branch>
 
 ### target-B (2 commits 需要同步)
+  🏷️ 同步點: sync-point/from-<source>-to-target-B (2025-01-15)
   abc1234 feat(api): add endpoint          ← from <source-branch>
   def5678 fix(auth): fix login             ← from <source-branch>
 
 ### target-C (1 commit 需要同步)
+  ⚠️ 無歷史同步點，完整比對
   ghi9012 refactor: optimize               ← from <source-branch>
 
 ### target-D (0 commits - 已同步)
+  🏷️ 同步點: sync-point/from-<source>-to-target-D (2025-01-20)
   ✓ 所有 commits 已同步
 
 ---

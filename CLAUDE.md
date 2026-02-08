@@ -54,10 +54,12 @@ The moxa plugin provides a three-phase Git workflow: **create-branch → commit 
   - No args — Interactive mode asking for branch names
   - Flow: pairwise comparison of all branches → aggregate missing commits per branch with source annotations → show sync status report → confirm → cherry-pick + create MRs
 
+- **Sync Point Tags**: After each successful cherry-pick sync, a tag `sync-point/from-<source>-to-<target>` is created on the last synced source commit. Scan skills use these tags to narrow future comparisons (only checking commits after the last sync point). Tags are pushed to remote for persistence.
+
 - **Additional Skills:**
-  - `moxa:scan-from-branch` — Compares a single source branch against multiple targets one-way to find missing commits per target
-  - `moxa:scan-branches` — Compares all input branches pairwise to find missing commits per branch, deduplicates by commit hash, annotates source branches
-  - `moxa:cherry-pick-sync` — Cherry-picks aggregated commits to a single target branch, creates sync branch, handles conflicts (called per branch)
+  - `moxa:scan-from-branch` — Compares a single source branch against multiple targets one-way to find missing commits per target; uses sync point tags when available to narrow search range
+  - `moxa:scan-branches` — Compares all input branches pairwise to find missing commits per branch, deduplicates by commit hash, annotates source branches; uses sync point tags when available
+  - `moxa:cherry-pick-sync` — Cherry-picks aggregated commits to a single target branch, creates sync branch, handles conflicts, creates sync point tags on success (called per branch)
 
 Cross-project MR creation requires a `GITLAB_PERSONAL_ACCESS_TOKEN` set via environment variable or `~/.claude/settings.json`.
 
@@ -74,3 +76,18 @@ Cross-project MR creation requires a `GITLAB_PERSONAL_ACCESS_TOKEN` set via envi
 - `allowed-tools` restricts which Bash commands and tools each command/skill can use (security boundary)
 - Branch naming follows conventional prefixes: `feature/`, `fix/`, `refactor/`, `docs/`, `test/`, `chore/`, `hotfix/`
 - Commits follow conventional commit format: `<type>(<scope>): <description>`
+
+## Plugin Versioning
+
+每次修改涉及 plugin 的 commits 時，必須同步更新該 plugin 的 `plugin.json` 中的 `version` 欄位。版號遵循 [Semantic Versioning](https://semver.org/)：
+
+- **MAJOR** (`X.0.0`)：不相容的 API 變更（如移除/重新命名 command、skill 介面變更、破壞性的行為改變）
+- **MINOR** (`0.X.0`)：向下相容的功能新增（如新增 command、新增 skill、新增功能特性）
+- **PATCH** (`0.0.X`)：向下相容的修正（如 bug fix、文件修正、小幅行為調整、重構）
+
+**判斷依據：** 根據 commit 的 type 決定版號變更幅度：
+- `feat` → bump MINOR
+- `fix`, `docs`, `refactor`, `chore`, `test`, `style`, `perf` → bump PATCH
+- 含 `BREAKING CHANGE` 或 `!` 標記 → bump MAJOR
+
+**注意：** 若同一次提交包含多個 commits，取最高級別的版號變更（MAJOR > MINOR > PATCH）。

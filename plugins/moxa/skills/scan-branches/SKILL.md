@@ -39,6 +39,8 @@ echo "使用 Remote: $REMOTE"
 
 ```bash
 git fetch $REMOTE --prune
+# 同時拉取同步點 tags
+git fetch $REMOTE 'refs/tags/sync-point/*:refs/tags/sync-point/*' 2>/dev/null || true
 ```
 
 ### 3. 驗證各分支
@@ -57,12 +59,27 @@ git branch -r | grep "$REMOTE/" | grep -v HEAD | grep "<branch-name>"
 
 ### 4. 多向 Pairwise 比對 Commits
 
-對每個分支 T，與所有其他分支 S 逐一比對，找出 T 缺少的 commits：
+對每個分支 T，與所有其他分支 S 逐一比對，找出 T 缺少的 commits。
+
+**每對 (S, T) 比對前，先檢查同步點 Tag：**
 
 ```bash
-# 對每一對 (T, S)：找出 S 有但 T 沒有的 commits
-# 即：T 缺少的、來自 S 的 commits
-git log --cherry-pick --right-only --no-merges --oneline $REMOTE/T...$REMOTE/S
+# 對每一對 (T, S)：
+SYNC_TAG="sync-point/from-${S}-to-${T}"
+git fetch $REMOTE "refs/tags/${SYNC_TAG}:refs/tags/${SYNC_TAG}" 2>/dev/null
+
+if git rev-parse "$SYNC_TAG" &>/dev/null; then
+  # 有同步點：取得 tag 的 commit 日期，只比對此日期之後的 commits
+  SYNC_DATE=$(git log -1 --format=%cI "$SYNC_TAG")
+  echo "找到同步點: $SYNC_TAG (${SYNC_DATE})"
+
+  # 縮小範圍：只查找同步點之後的 commits
+  git log --cherry-pick --right-only --no-merges --oneline \
+    --after="$SYNC_DATE" $REMOTE/$T...$REMOTE/$S
+else
+  # 無同步點：完整比對
+  git log --cherry-pick --right-only --no-merges --oneline $REMOTE/$T...$REMOTE/$S
+fi
 ```
 
 **比對說明：**
@@ -70,15 +87,23 @@ git log --cherry-pick --right-only --no-merges --oneline $REMOTE/T...$REMOTE/S
 - 使用 `--right-only` 只顯示右側分支（S）獨有的 commits
 - 使用 `--no-merges` 排除 merge commits
 - 這表示：「S 有但 T 沒有的 commits」= T 缺少的 commits
+- **有同步點 tag 時**：使用 `--after` 限制只比對同步點之後的 commits
+- **無同步點 tag 時**：回退到完整比對（相容舊行為）
 
 **範例（3 個分支 A, B, C）：**
 ```
-比對 A vs B: A 缺少來自 B 的 commits → [commit5]
-比對 A vs C: A 缺少來自 C 的 commits → [commit5, commit6]
-比對 B vs A: B 缺少來自 A 的 commits → [commit2]
-比對 B vs C: B 缺少來自 C 的 commits → [commit2, commit6]
-比對 C vs A: C 缺少來自 A 的 commits → [commit1, commit3]
-比對 C vs B: C 缺少來自 B 的 commits → [commit1, commit3]
+# 有同步點 sync-point/from-B-to-A (2025-01-15)
+比對 A vs B: A 缺少來自 B 的 commits（2025-01-15 之後）→ [commit5]
+
+# 無同步點
+比對 A vs C: A 缺少來自 C 的 commits（完整比對）→ [commit5, commit6]
+
+# 有同步點 sync-point/from-A-to-B (2025-01-10)
+比對 B vs A: B 缺少來自 A 的 commits（2025-01-10 之後）→ [commit2]
+
+比對 B vs C: B 缺少來自 C 的 commits（完整比對）→ [commit2, commit6]
+比對 C vs A: C 缺少來自 A 的 commits（完整比對）→ [commit1, commit3]
+比對 C vs B: C 缺少來自 B 的 commits（完整比對）→ [commit1, commit3]
 ```
 
 ### 5. 聚合與去重
@@ -122,13 +147,16 @@ git log --cherry-pick --right-only --no-merges --oneline $REMOTE/T...$REMOTE/S \
 ## 分支同步狀態報告
 
 ### branch-A (2 commits 需要同步)
+  🏷️ 同步點: from-B-to-A (2025-01-15), from-C-to-A: 無
   abc1234 feat(api): add endpoint          ← from branch-B, branch-C
   def5678 fix(auth): fix login             ← from branch-C
 
 ### branch-B (1 commit 需要同步)
+  🏷️ 同步點: from-A-to-B (2025-01-10)
   ghi9012 feat(ui): add dashboard          ← from branch-A
 
 ### branch-C (0 commits - 已同步)
+  🏷️ 同步點: from-A-to-C (2025-01-12), from-B-to-C (2025-01-12)
   ✓ 所有 commits 已同步
 
 ---

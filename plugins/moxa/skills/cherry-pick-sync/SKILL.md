@@ -107,6 +107,50 @@ Cherry-pick 全部成功後推送到 origin（使用者自己的 remote，即使
 git push -u origin "$SYNC_BRANCH"
 ```
 
+### 6.5. 建立同步點 Tag
+
+Cherry-pick 成功並 push 後，為每個來源分支建立同步點 tag，標記在該來源分支最後一個被 cherry-pick 的 commit 上。目的是讓下次掃描時可以從此同步點往後查找。
+
+**Tag 命名規則：** `sync-point/from-<source>-to-<target>`
+
+```bash
+# 對每個貢獻 commits 的來源分支，找出最後（最新）的 commit hash
+# LAST_COMMIT_HASH = 該來源分支中被 cherry-pick 的最新一筆 commit 的原始 hash
+
+for SOURCE_BRANCH in <all-source-branches-that-contributed-commits>; do
+  # 取得該來源分支最後被同步的 commit hash（原始 hash，非 cherry-pick 後的 hash）
+  LAST_SYNCED_HASH="<newest-commit-hash-from-this-source>"
+  TAG_NAME="sync-point/from-${SOURCE_BRANCH}-to-${TARGET_BRANCH}"
+
+  # 建立或更新 tag（-f 強制覆蓋已存在的 tag）
+  git tag -f "$TAG_NAME" "$LAST_SYNCED_HASH"
+
+  # 推送 tag 到 remote（-f 強制更新）
+  git push origin -f "$TAG_NAME"
+done
+```
+
+**範例：**
+```
+# sync-from: 從 branch-A 同步到 branch-B
+# 最後同步的 commit 是 abc1234（在 branch-A 上）
+git tag -f sync-point/from-branch-A-to-branch-B abc1234
+git push origin -f sync-point/from-branch-A-to-branch-B
+
+# sync-branches: 同步來自 B, C 的 commits 到 A
+# 來自 B 的最後 commit: def5678, 來自 C 的最後 commit: ghi9012
+git tag -f sync-point/from-branch-B-to-branch-A def5678
+git push origin -f sync-point/from-branch-B-to-branch-A
+git tag -f sync-point/from-branch-C-to-branch-A ghi9012
+git push origin -f sync-point/from-branch-C-to-branch-A
+```
+
+**注意事項：**
+- Tag 是 moving tag，每次同步會覆蓋更新
+- Tag 標記在來源分支的原始 commit 上（非 cherry-pick 後的 commit）
+- 必須推送到 remote 以確保跨 clone 可用
+- 如果某來源分支只貢獻了一個 commit，則 tag 標記在該 commit 上
+
 ### 7. 建立 MR
 
 使用 `moxa:create-pr` skill 建立 MR，傳入以下設定：
@@ -149,6 +193,12 @@ git checkout "$ORIGINAL_BRANCH"
 | 目標分支 | Sync 分支 | Commits | MR |
 |----------|-----------|---------|-----|
 | <target> | sync/to-<target> | 5 | !123 |
+
+🏷️ 同步點 Tags：
+| Tag | Commit | 來源分支 |
+|-----|--------|----------|
+| sync-point/from-branch-B-to-<target> | def5678 | branch-B |
+| sync-point/from-branch-C-to-<target> | ghi9012 | branch-C |
 ```
 
 **失敗時：**
@@ -165,9 +215,10 @@ git checkout "$ORIGINAL_BRANCH"
 
 - 確保工作目錄乾淨（無未提交的變更）
 - Cherry-pick 前確認 sync 分支名稱不衝突
-- 衝突時安全中止並清理
+- 衝突時安全中止並清理，**不建立同步點 tag**
 - 完成後一定切回原始分支
 - 不會修改任何現有分支的 commits
+- 同步點 tag 僅在 cherry-pick 全部成功且 push 完成後才建立
 
 ## Error Handling
 
