@@ -1,5 +1,5 @@
 ---
-name: moxa:scan-from-branch
+name: scan-from-branch
 allowed-tools: Bash(git:*), Bash(grep:*), AskUserQuestion
 description: Compare a single source branch against multiple target branches in one direction to find commits the targets are missing. Validates branches exist on remote, performs one-way comparison (source → each target), deduplicates by commit hash, and produces a per-target sync status report. Triggers on "scan from branch", "one-way compare", "find missing commits from source", or "compare source to targets".
 ---

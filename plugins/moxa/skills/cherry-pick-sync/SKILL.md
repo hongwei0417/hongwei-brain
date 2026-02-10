@@ -1,5 +1,5 @@
 ---
-name: moxa:cherry-pick-sync
+name: cherry-pick-sync
 allowed-tools: Bash(git:*), AskUserQuestion, Skill
 description: Execute cherry-pick sync of aggregated commits from multiple source branches to a single target branch. Creates a sync branch, cherry-picks commits in chronological order, handles conflicts by stopping and notifying, and triggers MR creation. Triggers on "cherry-pick sync", "sync commits", "cherry-pick to branch", or "sync branch".
 ---

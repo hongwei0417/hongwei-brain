@@ -1,5 +1,5 @@
 ---
-name: moxa:scan-branches
+name: scan-branches
 allowed-tools: Bash(git:*), Bash(grep:*), AskUserQuestion
 description: Compare multiple remote branches against each other pairwise to find missing commits per branch. Validates branches exist on remote, performs multi-directional comparison (each branch vs all others), deduplicates by commit hash, annotates source branches, and produces a comprehensive sync status report. Triggers on "scan branches", "compare branches", "find branches to sync", or "branch diff".
 ---
