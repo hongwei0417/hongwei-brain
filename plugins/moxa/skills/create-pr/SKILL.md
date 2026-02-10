@@ -1,5 +1,6 @@
 ---
-name: moxa:create-pr
+name: create-pr
+allowed-tools: Bash(git:*), Bash(curl:*), mcp__gitlab__create_merge_request, AskUserQuestion
 description: Create GitLab Merge Request with automatic fork detection. Handles both same-project MR and cross-project MR (fork to upstream). Supports custom target branch selection. Triggers on "create pr", "create mr", "merge request", "submit pr", or "push and create pr".
 ---
 
