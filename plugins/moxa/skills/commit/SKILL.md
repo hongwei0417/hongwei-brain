@@ -17,6 +17,10 @@ Create one or more well-structured git commits based on current changes, automat
 - Creating commits with Conventional Commit format
 - Ensuring sensitive information is not committed
 
+## Parameters (Optional)
+
+- **issue_tracker_base_url** — Issue tracker base URL (e.g. `https://myteam.atlassian.net`, `https://gitlab.com/group/project/-/issues`). When provided, this value will be carried forward in the workflow context so that subsequent skills (e.g. `create-pr`) can use it to generate clickable issue links in MR descriptions.
+
 ## Context Gathering
 
 Before committing, gather current state:
