@@ -16,6 +16,12 @@ Create GitLab Merge Request with automatic fork detection. Uses GitLab MCP for b
 - Creating Merge Request from feature branch
 - Pushing fork changes to upstream project
 
+## Parameters (Optional)
+
+This skill accepts the following optional parameters when invoked:
+
+- **issue_tracker_base_url** — Issue tracker base URL (e.g. `https://myteam.atlassian.net`, `https://gitlab.com/group/project/-/issues`). When provided, extracted issue keys will be rendered as clickable links. If not provided and issue keys are found, the skill will ask the user for the URL.
+
 ## Process
 
 ### 1. Analyze Repository State
@@ -96,21 +102,99 @@ git push -u origin $(git branch --show-current)
 
 ### 5. Generate MR Content
 
-**Title:**
-- From branch name or commit messages
+#### 5a. Gather Data
+
+```bash
+TARGET_BRANCH=<user selected target>
+CURRENT_BRANCH=$(git branch --show-current)
+MERGE_BASE=$(git merge-base origin/$TARGET_BRANCH $CURRENT_BRANCH)
+
+# Commit messages for understanding changes
+git log --no-merges --format='%h %s' $MERGE_BASE..$CURRENT_BRANCH
+
+# Full commit bodies (may contain issue references or URLs)
+git log --no-merges --format='%h %s%n%b' $MERGE_BASE..$CURRENT_BRANCH
+
+# Diff for understanding scope and details
+git diff $MERGE_BASE..$CURRENT_BRANCH
+git diff --stat $MERGE_BASE..$CURRENT_BRANCH
+```
+
+#### 5b. Generate Title
+
+- Single commit → use its message directly as title
+- Multiple commits with same type/scope → synthesize (e.g. `feat(auth): add login and registration`)
+- Multiple types → dominant type + general scope
 - Keep under 70 characters
 
-**Description Template:**
+#### 5c. Extract Related Links
+
+Scan all commit subjects and bodies for references:
+
+1. **Full URLs** — Match any `https?://...` URLs directly (e.g. `https://gitlab.com/group/project/-/issues/42`)
+2. **Issue keys** — Match patterns like `[A-Z]+-\d+` (e.g. `PROJ-123`), `#\d+` (e.g. `#42`)
+
+Deduplicate all extracted references, then:
+
+- Full URLs → use as-is
+- Issue keys + `issue_tracker_base_url` provided → build links (e.g. `[PROJ-123](<base_url>/browse/PROJ-123)`)
+- Issue keys found but no base URL → use AskUserQuestion to ask for the base URL
+- No references found → omit the Related Issues section entirely
+
+#### 5d. Generate Description
+
+Analyze the diff content and commit messages, then generate the MR description using this template:
+
 ```markdown
-## Summary
-- [1-3 bullet points describing changes]
+## 📋 Summary
 
-## Test Plan
-- [ ] [Testing checklist items]
+<!-- 1-2 sentence high-level overview of the MR purpose, generated from analyzing commits + diff -->
 
-## Related Issues
-- Closes #XXX (if applicable)
+## ✨ Changes
+
+<!-- Each bullet = one logical change, with a contextual emoji prefix.
+     Derived from analyzing the actual diff content and commit messages.
+     Group related changes together. Each bullet should be human-readable
+     and explain WHAT changed and WHY, not just list file names. -->
+
+- 🔐 加入使用者登入 API endpoint，支援 email/password 認證
+- ✅ 新增登入流程的單元測試與整合測試
+- 🗑️ 移除已棄用的舊版認證模組
+- 📝 更新 API 文件，補充認證相關說明
+
+## 🧪 Test Plan
+
+- [ ] [Testing checklist items based on changes]
+
+## 🔗 Related Issues
+
+<!-- 從 commit messages 中自動擷取 issue references 和 URLs，無任何 references 則省略此區塊 -->
+- [PROJ-123](https://myteam.atlassian.net/browse/PROJ-123)
+- [#42](https://gitlab.com/group/project/-/issues/42)
+- https://some-tracker.com/ticket/789
 ```
+
+**Emoji 使用原則：**
+
+| Emoji | 適用情境 |
+|-------|---------|
+| ✨ | 新功能 |
+| 🐛 | Bug 修復 |
+| ♻️ | 重構 |
+| 🗑️ | 移除程式碼/檔案 |
+| 📝 | 文件更新 |
+| ✅ | 測試新增/修改 |
+| 🔐 | 安全性/認證相關 |
+| ⚡ | 效能改善 |
+| 🎨 | UI/樣式調整 |
+| 🔧 | 設定/配置變更 |
+| 📦 | 依賴/套件變更 |
+| 🏗️ | 架構調整 |
+
+**Key design points:**
+- **Summary** — 分析 diff + commits 後寫出 1-2 句概述，說明這個 MR 的整體目的
+- **Changes** — 逐一分析每個邏輯改動，寫成人類可讀的 bullet point，每項搭配最適合的 emoji。描述改了什麼、為什麼改，而非列出檔案名稱
+- **Related Issues** — 自動從 commits 擷取 issue keys（`PROJ-123`, `#42`）和完整 URLs，搭配 `issue_tracker_base_url` 產生連結；無任何 references 則省略此區塊
 
 ### 6. Extract Project Identifiers
 
