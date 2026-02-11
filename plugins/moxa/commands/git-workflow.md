@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git:*), Bash(curl:*), Read, Grep, Glob, AskUserQuestion, Skill
+allowed-tools: Bash(git:*), Read, Grep, Glob, AskUserQuestion, Skill
 argument-hint: [--full | --step <step-name>]
 description: Integrated Git workflow completing create-branch → commit → create-pr in one flow
 ---

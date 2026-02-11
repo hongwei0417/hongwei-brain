@@ -41,7 +41,7 @@ The moxa plugin provides a three-phase Git workflow: **create-branch → commit 
 - **Skills:**
   - `moxa:create-branch` — Creates feature/fix branches with optional worktree support
   - `moxa:commit` — Analyzes changes, decides single vs. multi-commit strategy, uses conventional commits
-  - `moxa:create-pr` — Detects fork scenarios, creates GitLab MRs (same-project via MCP, cross-project via API)
+  - `moxa:create-pr` — Detects fork scenarios, creates GitLab MRs via GitLab MCP (same-project and cross-project)
 
 - **`/sync-from`** — One-way sync from a source branch to target branches:
   - `<source> <target1> [target2...]` — First arg is source, rest are targets
@@ -61,7 +61,7 @@ The moxa plugin provides a three-phase Git workflow: **create-branch → commit 
   - `moxa:scan-branches` — Compares all input branches pairwise to find missing commits per branch, deduplicates by commit hash, annotates source branches; uses sync point tags when available
   - `moxa:cherry-pick-sync` — Cherry-picks aggregated commits to a single target branch, creates sync branch, handles conflicts, creates sync point tags on success (called per branch)
 
-Cross-project MR creation requires a `GITLAB_PERSONAL_ACCESS_TOKEN` set via environment variable or `~/.claude/settings.json`.
+Cross-project MR creation uses GitLab MCP with the `target_project_id` parameter (authentication handled by MCP server configuration).
 
 ## Adding a New Plugin
 

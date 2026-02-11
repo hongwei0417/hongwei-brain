@@ -1,14 +1,14 @@
 ---
 name: create-pr
-allowed-tools: Bash(git:*), Bash(curl:*), mcp__gitlab__create_merge_request, AskUserQuestion
-description: Create GitLab Merge Request with automatic fork detection. Handles both same-project MR and cross-project MR (fork to upstream). Supports custom target branch selection. Triggers on "create pr", "create mr", "merge request", "submit pr", or "push and create pr".
+allowed-tools: Bash(git:*), mcp__gitlab__create_merge_request, mcp__gitlab__get_project, AskUserQuestion
+description: Create GitLab Merge Request with automatic fork detection. Handles both same-project MR and cross-project MR (fork to upstream) via GitLab MCP. Supports custom target branch selection. Triggers on "create pr", "create mr", "merge request", "submit pr", or "push and create pr".
 ---
 
 # Create PR Skill (GitLab)
 
 ## Overview
 
-Create GitLab Merge Request with automatic fork detection. Supports both same-project MR (via GitLab MCP) and cross-project MR (fork → upstream via direct API). Allows custom target branch selection.
+Create GitLab Merge Request with automatic fork detection. Uses GitLab MCP for both same-project and cross-project (fork → upstream) MR creation. Allows custom target branch selection.
 
 ## When to Use
 
@@ -48,11 +48,11 @@ UPSTREAM_URL=$(git remote get-url upstream 2>/dev/null)
 
 **Scenario A: Same Project (No Fork)**
 - Only `origin` remote exists
-- Use GitLab MCP tools directly
+- Use `mcp__gitlab__create_merge_request` with `project_id` only
 
 **Scenario B: Fork (origin → upstream)**
 - Both `origin` and `upstream` remotes exist
-- Need cross-project MR via GitLab API
+- Use `mcp__gitlab__create_merge_request` with `project_id` (source) + `target_project_id` (upstream)
 
 ### 3. Collect MR Settings
 
@@ -112,68 +112,55 @@ git push -u origin $(git branch --show-current)
 - Closes #XXX (if applicable)
 ```
 
-### 6A. Create MR - Same Project (GitLab MCP)
+### 6. Extract Project Identifiers
+
+**Extract project path from git remote URL:**
+
+```bash
+# Extract project path (supports both SSH and HTTPS URLs)
+# git@gitlab.com:user/repo.git → user/repo
+# https://gitlab.com/user/repo.git → user/repo
+ORIGIN_PROJECT=$(git remote get-url origin | sed -E 's|.*[:/]([^/]+/[^/]+)(\.git)?$|\1|' | sed 's|\.git$||')
+```
+
+**For fork scenario, also extract upstream project path:**
+
+```bash
+UPSTREAM_PROJECT=$(git remote get-url upstream | sed -E 's|.*[:/]([^/]+/[^/]+)(\.git)?$|\1|' | sed 's|\.git$||')
+```
+
+**Resolve numeric project IDs using `mcp__gitlab__get_project`:**
+
+For cross-project MR, call `mcp__gitlab__get_project` with the URL-encoded upstream project path to get its numeric `id`. This is needed for the `target_project_id` parameter.
+
+### 7. Create MR via GitLab MCP
+
+#### Scenario A: Same Project
 
 Use `mcp__gitlab__create_merge_request`:
 
 ```
-project_id: <extracted from origin URL>
+project_id: <origin project path, URL-encoded>
 source_branch: <current branch>
 target_branch: <user selected target branch>
 title: <generated title>
 description: <generated description>
 ```
 
-### 6B. Create MR - Cross Project (Direct API)
+#### Scenario B: Cross Project (Fork)
 
-**Step 1: Get GitLab Token**
+Use `mcp__gitlab__create_merge_request`:
 
-```bash
-# Try environment variable first
-TOKEN=$GITLAB_PERSONAL_ACCESS_TOKEN
-
-# If not set, read from settings
-if [ -z "$TOKEN" ]; then
-  TOKEN=$(cat ~/.claude/settings.json | jq -r '.env.GITLAB_PERSONAL_ACCESS_TOKEN // empty')
-fi
+```
+project_id: <origin project path, URL-encoded (source/fork)>
+target_project_id: <upstream numeric project ID from mcp__gitlab__get_project>
+source_branch: <current branch>
+target_branch: <user selected target branch>
+title: <generated title>
+description: <generated description>
 ```
 
-**Step 2: Extract Project IDs**
-
-```bash
-# Extract project path from URL
-ORIGIN_PROJECT=$(git remote get-url origin | sed -E 's|.*[:/]([^/]+/[^/]+)(\.git)?$|\1|')
-UPSTREAM_PROJECT=$(git remote get-url upstream | sed -E 's|.*[:/]([^/]+/[^/]+)(\.git)?$|\1|')
-
-# URL encode
-ORIGIN_ENCODED=$(echo "$ORIGIN_PROJECT" | sed 's|/|%2F|g')
-UPSTREAM_ENCODED=$(echo "$UPSTREAM_PROJECT" | sed 's|/|%2F|g')
-```
-
-**Step 3: Get Source Project ID**
-
-```bash
-SOURCE_PROJECT_ID=$(curl -s --header "PRIVATE-TOKEN: $TOKEN" \
-  "https://gitlab.com/api/v4/projects/$ORIGIN_ENCODED" | jq -r '.id')
-```
-
-**Step 4: Create Cross-Project MR**
-
-```bash
-curl -s --request POST \
-  --header "PRIVATE-TOKEN: $TOKEN" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "source_branch": "<branch>",
-    "target_branch": "<user selected target branch>",
-    "title": "<title>",
-    "description": "<description>",
-    "source_project_id": <SOURCE_PROJECT_ID>
-  }' \
-  "https://gitlab.com/api/v4/projects/$UPSTREAM_ENCODED/merge_requests"
-```
-
-### 7. Report Results
+### 8. Report Results
 
 After MR creation, report:
 - MR URL
@@ -199,44 +186,19 @@ The skill supports flexible target branch selection:
 - `hotfix/*` → `main` and `production`
 - `release/*` → `main`
 
-## Token Configuration
-
-Users should configure GitLab token in one of these ways:
-
-**Option 1: Environment Variable**
-```bash
-export GITLAB_PERSONAL_ACCESS_TOKEN=glpat-xxxx
-```
-
-**Option 2: Claude Settings**
-In `~/.claude/settings.json`:
-```json
-{
-  "env": {
-    "GITLAB_PERSONAL_ACCESS_TOKEN": "glpat-xxxx"
-  }
-}
-```
-
-**Required Token Scopes:**
-- `api` - Full API access
-- `read_repository` - Read repository
-- `write_repository` - Write repository
-
 ## Error Handling
 
-**No token found:**
-```
-錯誤：找不到 GitLab Token
-
-請設定 GITLAB_PERSONAL_ACCESS_TOKEN：
-1. 環境變數: export GITLAB_PERSONAL_ACCESS_TOKEN=glpat-xxxx
-2. 或在 ~/.claude/settings.json 中設定
-```
-
-**API error:**
-- Parse error message from response
+**MCP tool error:**
+- Parse error message from MCP response
 - Suggest common fixes (permissions, branch exists, etc.)
+
+**No upstream remote for fork scenario:**
+```
+錯誤：找不到 upstream remote
+
+如果這是 fork 專案，請先設定 upstream remote：
+git remote add upstream <upstream-url>
+```
 
 ## Examples
 
@@ -244,7 +206,7 @@ In `~/.claude/settings.json`:
 ```
 Branch: feature/add-auth
 Target: main
-Method: GitLab MCP
+Method: GitLab MCP (project_id only)
 Result: !123 https://gitlab.com/user/repo/-/merge_requests/123
 ```
 
@@ -252,7 +214,7 @@ Result: !123 https://gitlab.com/user/repo/-/merge_requests/123
 ```
 Branch: feature/add-auth
 Target: develop (user selected)
-Method: GitLab MCP
+Method: GitLab MCP (project_id only)
 Result: !124 https://gitlab.com/user/repo/-/merge_requests/124
 ```
 
@@ -260,7 +222,7 @@ Result: !124 https://gitlab.com/user/repo/-/merge_requests/124
 ```
 Source: user/repo-fork (feature/add-auth)
 Target: original/repo (release/v2.0)
-Method: Direct API
+Method: GitLab MCP (project_id + target_project_id)
 Result: !456 https://gitlab.com/original/repo/-/merge_requests/456
 ```
 
