@@ -8,7 +8,7 @@ Integrated Git workflow plugin providing create-branch → commit → create-pr 
 - **Uninterrupted Execution**: Git operations (create-branch → commit → create-pr) run continuously
 - **Flexible Target Branch**: Create PR supports selecting any target branch
 - **Fork Support**: Auto-detect fork scenarios, support cross-project MR
-- **GitLab Integration**: Via GitLab MCP and direct API operations
+- **GitLab Integration**: Via GitLab MCP for all MR operations
 - **One-Way Sync**: Cherry-pick commits from a source branch to multiple target branches
 - **Multi-Directional Sync**: Pairwise comparison across multiple equal-status branches
 
@@ -92,8 +92,8 @@ Create GitLab Merge Request:
 
 - Support selecting any target branch
 - Auto-detect fork scenarios
-- Same-project MR: Uses GitLab MCP
-- Cross-project MR: Uses GitLab API
+- Same-project MR: GitLab MCP
+- Cross-project MR: GitLab MCP (with target_project_id)
 
 **Target Branch Options:**
 ```
@@ -101,28 +101,6 @@ Create GitLab Merge Request:
 2. develop
 3. <parent branch of current branch>
 4. Custom input
-```
-
-## GitLab Token Setup
-
-Cross-project MR requires GitLab Personal Access Token:
-
-### Option 1: Environment Variable
-
-```bash
-export GITLAB_PERSONAL_ACCESS_TOKEN=glpat-xxxx
-```
-
-### Option 2: Claude Settings
-
-In `~/.claude/settings.json`:
-
-```json
-{
-  "env": {
-    "GITLAB_PERSONAL_ACCESS_TOKEN": "glpat-xxxx"
-  }
-}
 ```
 
 ## Workflow Examples
@@ -218,8 +196,7 @@ moxa/
 ## Dependencies
 
 - Git (required)
-- GitLab MCP Server (for same-project MR)
-- curl (for cross-project MR API calls)
+- GitLab MCP Server (for all MR operations)
 
 ## License
 
