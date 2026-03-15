@@ -1,16 +1,16 @@
 ---
 allowed-tools: Bash(diff:*), Bash(cp:*), Bash(ls:*), Bash(mkdir:*), Bash(cat:*), Bash(find:*), AskUserQuestion, Read, Write, Edit, Glob, Grep
-description: Sync files between openspec/ and libs/switch/.openspec/ — ensures both directories contain all files with consistent content, resolving conflicts interactively
+description: Sync files between openspec/ and libs/switch/_openspec/ — ensures both directories contain all files with consistent content, resolving conflicts interactively
 ---
 
 # Sync OpenSpec - 雙向檔案同步工作流程
 
-同步 `openspec/` 與 `libs/switch/.openspec/` 兩個目錄的檔案，確保兩邊都涵蓋所有檔案且內容一致。單邊獨有的檔案自動複製到另一邊，內容衝突時展示 diff 並詢問使用者如何合併。
+同步 `openspec/` 與 `libs/switch/_openspec/` 兩個目錄的檔案，確保兩邊都涵蓋所有檔案且內容一致。單邊獨有的檔案自動複製到另一邊，內容衝突時展示 diff 並詢問使用者如何合併。
 
 ## 目錄定義
 
 - **目錄 A**: `openspec/` （專案根目錄下）
-- **目錄 B**: `libs/switch/.openspec/`
+- **目錄 B**: `libs/switch/_openspec/`
 
 ## 前置檢查
 
@@ -28,12 +28,12 @@ description: Sync files between openspec/ and libs/switch/.openspec/ — ensures
 (cd openspec && find . -type f | sort)
 
 # 列出目錄 B 的所有檔案（相對路徑）
-(cd libs/switch/.openspec && find . -type f | sort)
+(cd libs/switch/_openspec && find . -type f | sort)
 ```
 
 將檔案分為三類：
 - **僅存在於 A**：只在 `openspec/` 中有的檔案
-- **僅存在於 B**：只在 `libs/switch/.openspec/` 中有的檔案
+- **僅存在於 B**：只在 `libs/switch/_openspec/` 中有的檔案
 - **兩邊都有**：兩個目錄都有的同名檔案
 
 ### Step 2: 展示同步狀態報告
@@ -47,7 +47,7 @@ description: Sync files between openspec/ and libs/switch/.openspec/ — ensures
   - path/to/file1.yaml
   - path/to/file2.json
 
-### 📁 僅存在於 libs/switch/.openspec/ (N 個檔案)
+### 📁 僅存在於 libs/switch/_openspec/ (N 個檔案)
   - path/to/file3.yaml
 
 ### 🔄 兩邊都有的檔案 (N 個檔案)
@@ -55,8 +55,8 @@ description: Sync files between openspec/ and libs/switch/.openspec/ — ensures
   ⚠️ path/to/conflict.yaml — 內容不同
 
 ### 📊 統計
-- openspec/ 獨有: X 個檔案（將複製到 libs/switch/.openspec/）
-- libs/switch/.openspec/ 獨有: Y 個檔案（將複製到 openspec/）
+- openspec/ 獨有: X 個檔案（將複製到 libs/switch/_openspec/）
+- libs/switch/_openspec/ 獨有: Y 個檔案（將複製到 openspec/）
 - 內容一致: Z 個檔案（無需處理）
 - 內容衝突: W 個檔案（需要處理）
 ```
@@ -77,7 +77,7 @@ description: Sync files between openspec/ and libs/switch/.openspec/ — ensures
 1. **展示 diff**：使用 `diff` 命令顯示兩邊的差異
 
 ```bash
-diff openspec/<file> libs/switch/.openspec/<file>
+diff openspec/<file> libs/switch/_openspec/<file>
 ```
 
 2. **使用 AskUserQuestion 詢問使用者**：
@@ -88,8 +88,8 @@ diff openspec/<file> libs/switch/.openspec/<file>
 （展示 diff 摘要）
 
 請選擇處理方式：
-1. 使用 openspec/ 的版本（覆蓋 libs/switch/.openspec/）
-2. 使用 libs/switch/.openspec/ 的版本（覆蓋 openspec/）
+1. 使用 openspec/ 的版本（覆蓋 libs/switch/_openspec/）
+2. 使用 libs/switch/_openspec/ 的版本（覆蓋 openspec/）
 3. 手動合併（我會協助整合兩邊內容）
 4. 跳過此檔案
 ```
@@ -110,8 +110,8 @@ diff openspec/<file> libs/switch/.openspec/<file>
 ### ✅ 已複製
 | 檔案 | 方向 |
 |------|------|
-| file1.yaml | openspec/ → libs/switch/.openspec/ |
-| file3.yaml | libs/switch/.openspec/ → openspec/ |
+| file1.yaml | openspec/ → libs/switch/_openspec/ |
+| file3.yaml | libs/switch/_openspec/ → openspec/ |
 
 ### 🔄 衝突已解決
 | 檔案 | 處理方式 |
