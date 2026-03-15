@@ -1,7 +1,7 @@
 {
 	"name": "moxa",
-	"version": "1.3.0",
-	"description": "Integrated Git workflow plugin providing create-branch → commit → create-pr flow, cherry-pick sync across branches, and unified GitLab MCP integration",
+	"version": "1.4.0",
+	"description": "Integrated Git workflow plugin providing create-branch → commit → create-pr flow, cherry-pick sync across branches, OpenSpec directory sync, and unified GitLab MCP integration",
 	"author": {
 		"name": "Kevin Hu",
 		"email": "iamhongwei0417@gmail.com"
@@ -9,5 +9,5 @@
 	"homepage": "https://github.com/hongwei0417/hongwei-brain",
 	"repository": "https://github.com/hongwei0417/hongwei-brain",
 	"license": "MIT",
-	"keywords": ["git", "workflow", "branch", "commit", "pr", "gitlab", "moxa", "cherry-pick", "sync"]
+	"keywords": ["git", "workflow", "branch", "commit", "pr", "gitlab", "moxa", "cherry-pick", "sync", "openspec"]
 }
