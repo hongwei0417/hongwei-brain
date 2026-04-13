@@ -1,62 +1,71 @@
 ---
 name: sync-upstream
 allowed-tools: Bash(git pull:*), Bash(git fetch:*), Bash(git push:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git log:*), Bash(git diff:*), Bash(git merge --abort:*), Bash(git rebase --abort:*), Bash(git remote:*), AskUserQuestion
-description: Synchronize the current local branch with its upstream remote tracking branch using git pull. Uses pull with merge for main/master branches and pull with rebase for all others, handles conflicts gracefully by restoring state, and optionally pushes after sync. Use when needing to "sync with upstream", "pull latest changes", "update branch from remote", or "rebase on upstream".
+description: Synchronize the current local branch with the matching branch on the `upstream` remote (from `git remote -v`) using git pull, then push the synced result to the branch's own tracking remote. Uses pull with merge for main/master branches and pull with rebase for all others, handles conflicts gracefully by restoring state. Use when needing to "sync with upstream", "pull latest changes", "update branch from upstream remote", or "rebase on upstream".
 ---
 
 # Sync Upstream Skill
 
 ## Overview
 
-Synchronize the current local branch with its tracked upstream (remote tracking) branch using `git pull`. Automatically selects merge or rebase strategy based on branch name and handles conflicts safely.
+Synchronize the current local branch with the matching branch on the `upstream` remote (as listed in `git remote -v`), then push the synced result to the branch's own tracking remote (typically `origin`). Automatically selects merge or rebase strategy based on branch name and handles conflicts safely.
+
+This is the classic fork workflow: pull from `upstream/<branch>`, push to `origin/<branch>`.
 
 ## Workflow
 
 ### Phase 1: Detect Branch and Upstream State
 
-Gather current branch information and upstream tracking configuration:
+Gather current branch information, the `upstream` remote, and the tracking remote:
 
 ```bash
 # Get current branch name
 git rev-parse --abbrev-ref HEAD
 
-# Check if current branch has an upstream tracking branch
+# List all remotes to verify `upstream` exists
+git remote -v
+
+# Check if the current branch has a tracking remote (for the final push)
 git rev-parse --abbrev-ref @{upstream} 2>/dev/null
 ```
 
-**If no upstream is configured:**
-- Execute `git fetch --all` to retrieve latest remote references
-- Inform the user that the current branch has no upstream tracking branch configured
-- Report fetch results and stop — no pull is needed
+**Required state:**
+- A remote named `upstream` must exist in `git remote -v`. If not, inform the user that this skill syncs from an `upstream` remote and stop.
+- The current branch should have a tracking remote branch (e.g. `origin/<branch>`) for the post-sync push. If not configured, warn the user — the sync can still run, but Phase 4 will need an explicit push target.
 
-**If upstream exists**, proceed to Phase 2.
+The sync source is always `upstream/<current-branch>` — **not** the branch's tracking remote. The tracking remote is only used as the push target in Phase 4.
+
+**If `upstream/<current-branch>` does not exist on the `upstream` remote** (verified in Phase 2 after fetch), inform the user and stop.
 
 ### Phase 2: Check Sync Status
 
 ```bash
-# Fetch latest from the upstream remote
-git fetch
+# Fetch latest from the upstream remote specifically
+git fetch upstream
 
-# Check divergence between local and upstream
-git log --oneline HEAD..@{upstream}
-git log --oneline @{upstream}..HEAD
+# Verify upstream/<branch> exists
+git rev-parse --verify upstream/<current-branch> 2>/dev/null
+
+# Check divergence between local and upstream/<branch>
+git log --oneline HEAD..upstream/<current-branch>
+git log --oneline upstream/<current-branch>..HEAD
 ```
 
 Report the sync status:
-- How many commits the local branch is **behind** upstream
-- How many commits the local branch is **ahead** of upstream
-- If already up-to-date, inform the user and skip to Phase 4 (push prompt)
+- How many commits the local branch is **behind** `upstream/<branch>`
+- How many commits the local branch is **ahead** of `upstream/<branch>`
+- If already up-to-date, inform the user and skip to Phase 4 (push prompt) — the tracking remote may still need a push if it's behind.
 
 ### Phase 3: Pull with Strategy
 
-Determine the pull strategy based on the current branch name:
+Pull from `upstream/<current-branch>` explicitly (not from the tracking remote). Determine the strategy based on the current branch name.
 
 #### Main/Master Branch → Pull with Merge
 
 If the current branch is `main` or `master`:
 
 ```bash
-git pull --no-rebase
+git pull --no-rebase upstream <current-branch>
 ```
 
 If the pull produces conflicts:
@@ -70,7 +79,7 @@ If the pull produces conflicts:
 If the current branch is anything other than `main` or `master`:
 
 ```bash
-git pull --rebase
+git pull --rebase upstream <current-branch>
 ```
 
 If the pull produces conflicts:
@@ -78,23 +87,26 @@ If the pull produces conflicts:
 2. Report the conflicting files to the user
 3. **Stop execution** — do not proceed to push
 
-### Phase 4: Post-Sync
+### Phase 4: Post-Sync Push to Tracking Remote
 
-After a successful pull:
+After a successful pull from `upstream`, push the synced branch to its own tracking remote (e.g. `origin`), so the fork stays in sync with upstream.
 
 1. Show a summary of changes synced (commit count, key changes)
-2. Ask the user whether to push immediately:
+2. Identify the tracking remote from Phase 1 (`@{upstream}` — typically `origin/<branch>`)
+3. Ask the user whether to push to the tracking remote:
    - If the branch was rebased, push requires `--force-with-lease` — warn the user about this before proceeding
    - If the branch was merged, a normal `git push` is sufficient
-3. If the user confirms, execute the push:
+4. If the user confirms, execute the push to the **tracking remote** (not to `upstream`):
 
 ```bash
-# For merged branches (main/master)
+# For merged branches (main/master) — push to tracking remote
 git push
 
-# For rebased branches (force-with-lease for safety)
+# For rebased branches — force-with-lease for safety
 git push --force-with-lease
 ```
+
+**Never push back to the `upstream` remote** — it is read-only in this workflow. The push always targets the branch's own tracking remote.
 
 ## Conflict Handling Policy
 
@@ -107,4 +119,6 @@ git push --force-with-lease
 
 - **Detached HEAD**: If `git rev-parse --abbrev-ref HEAD` returns `HEAD`, inform the user that sync requires being on a named branch and stop
 - **Uncommitted changes**: Before starting sync, check `git status --porcelain`. If there are uncommitted changes, warn the user and recommend committing or stashing first before proceeding
-- **No remote configured**: If `git remote` returns empty, inform the user that no remote is configured and stop
+- **No `upstream` remote**: If `git remote -v` does not list a remote named `upstream`, inform the user that this skill requires an `upstream` remote and stop
+- **`upstream/<branch>` missing**: If the matching branch does not exist on the `upstream` remote after `git fetch upstream`, inform the user and stop
+- **No tracking remote for push**: If the current branch has no `@{upstream}` tracking remote, the pull still works but Phase 4 needs the user to specify a push target (or set upstream with `-u`)
