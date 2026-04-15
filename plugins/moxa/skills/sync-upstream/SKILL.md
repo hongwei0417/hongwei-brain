@@ -1,6 +1,6 @@
 ---
 name: sync-upstream
-allowed-tools: Bash(git pull:*), Bash(git fetch:*), Bash(git push:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git log:*), Bash(git diff:*), Bash(git merge --abort:*), Bash(git rebase --abort:*), Bash(git remote:*), AskUserQuestion
+allowed-tools: Bash(git pull:*), Bash(git fetch:*), Bash(git push:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git log:*), Bash(git diff:*), Bash(git merge --abort:*), Bash(git rebase --abort:*), Bash(git remote:*)
 description: Synchronize the current local branch with the matching branch on the `upstream` remote (from `git remote -v`) using git pull, then push the synced result to the branch's own tracking remote. Uses pull with merge for main/master branches and pull with rebase for all others, handles conflicts gracefully by restoring state. Use when needing to "sync with upstream", "pull latest changes", "update branch from upstream remote", or "rebase on upstream".
 ---
 
@@ -89,14 +89,11 @@ If the pull produces conflicts:
 
 ### Phase 4: Post-Sync Push to Tracking Remote
 
-After a successful pull from `upstream`, push the synced branch to its own tracking remote (e.g. `origin`), so the fork stays in sync with upstream.
+After a successful pull from `upstream`, **automatically** push the synced branch to its own tracking remote (e.g. `origin`), so the fork stays in sync with upstream. Do **not** ask the user for confirmation — if Phase 3 completed without errors, proceed directly to push.
 
 1. Show a summary of changes synced (commit count, key changes)
 2. Identify the tracking remote from Phase 1 (`@{upstream}` — typically `origin/<branch>`)
-3. Ask the user whether to push to the tracking remote:
-   - If the branch was rebased, push requires `--force-with-lease` — warn the user about this before proceeding
-   - If the branch was merged, a normal `git push` is sufficient
-4. If the user confirms, execute the push to the **tracking remote** (not to `upstream`):
+3. Execute the push to the **tracking remote** (not to `upstream`) based on the strategy used in Phase 3:
 
 ```bash
 # For merged branches (main/master) — push to tracking remote
@@ -105,6 +102,12 @@ git push
 # For rebased branches — force-with-lease for safety
 git push --force-with-lease
 ```
+
+4. Report the push result to the user (success or failure). If the push fails, report the error but do not retry automatically.
+
+**Skip auto-push only if:**
+- Phase 3 was skipped because the branch was already up-to-date **and** the local branch is not ahead of the tracking remote (nothing to push)
+- The branch has no `@{upstream}` tracking remote configured (see Edge Cases) — in that case, report that no push target exists and stop
 
 **Never push back to the `upstream` remote** — it is read-only in this workflow. The push always targets the branch's own tracking remote.
 
