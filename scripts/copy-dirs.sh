@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # copy-dirs.sh
-# 複製來源目錄底下指定的資料夾到目的目錄。
-# 若來源目錄底下沒有該資料夾則跳過。
+# 複製來源目錄底下指定的資料夾或檔案到目的目錄。
+# 若來源目錄底下沒有該項目則跳過。
 #
 # 使用方式:
 #   ./copy-dirs.sh <來源目錄> <目的目錄>
@@ -13,10 +13,11 @@
 
 set -euo pipefail
 
-# ===== 要複製的資料夾清單 (可自行增減) =====
-DIRS_TO_COPY=(
+# ===== 要複製的項目清單 — 資料夾或檔案皆可 (可自行增減) =====
+ITEMS_TO_COPY=(
     ".claude"
     ".planning"
+    ".env"
 )
 # ==========================================
 
@@ -40,8 +41,8 @@ usage() {
     cat <<EOF
 使用方式: $(basename "$0") <來源目錄> <目的目錄>
 
-將來源目錄底下以下資料夾複製到目的目錄 (不存在則跳過):
-$(printf '  - %s\n' "${DIRS_TO_COPY[@]}")
+將來源目錄底下以下項目複製到目的目錄 (不存在則跳過):
+$(printf '  - %s\n' "${ITEMS_TO_COPY[@]}")
 
 選項:
   -h, --help    顯示此說明
@@ -87,25 +88,34 @@ copied=0
 skipped=0
 failed=0
 
-for dir in "${DIRS_TO_COPY[@]}"; do
-    src_path="$SRC_ABS/$dir"
-    dst_path="$DST_ABS/$dir"
+for item in "${ITEMS_TO_COPY[@]}"; do
+    src_path="$SRC_ABS/$item"
+    dst_path="$DST_ABS/$item"
 
-    if [[ ! -d "$src_path" ]]; then
-        log_warn "來源無此資料夾，跳過: $dir"
-        ((skipped+=1))
-        continue
-    fi
-
-    log_info "複製中: $dir ..."
-    # 先確保目的端目錄存在，再用 -a 保留屬性/連結/時間；尾綴 /. 避免多包一層
-    mkdir -p "$dst_path"
-    if cp -a "$src_path/." "$dst_path/"; then
-        log_ok "已複製: $dir  ->  $dst_path"
-        ((copied+=1))
+    if [[ -d "$src_path" ]]; then
+        # 複製資料夾
+        log_info "複製資料夾: $item ..."
+        mkdir -p "$dst_path"
+        if cp -a "$src_path/." "$dst_path/"; then
+            log_ok "已複製: $item  ->  $dst_path"
+            ((copied+=1))
+        else
+            log_error "複製失敗: $item"
+            ((failed+=1))
+        fi
+    elif [[ -f "$src_path" ]]; then
+        # 複製檔案
+        log_info "複製檔案: $item ..."
+        if cp -a "$src_path" "$dst_path"; then
+            log_ok "已複製: $item  ->  $dst_path"
+            ((copied+=1))
+        else
+            log_error "複製失敗: $item"
+            ((failed+=1))
+        fi
     else
-        log_error "複製失敗: $dir"
-        ((failed+=1))
+        log_warn "來源無此項目，跳過: $item"
+        ((skipped+=1))
     fi
 done
 
