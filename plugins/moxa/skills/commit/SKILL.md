@@ -1,7 +1,7 @@
 ---
 name: commit
-allowed-tools: Bash(git add:*), Bash(git status:*), Bash(git commit:*), Bash(git diff:*), Bash(git log:*)
-description: Create well-structured git commits with automatic splitting analysis. Use when committing changes, creating commits, or needing to decide whether to split changes into multiple commits. Triggers on "commit changes", "create commit", "stage and commit", or "commit work".
+allowed-tools: Bash(git add:*), Bash(git status:*), Bash(git commit:*), Bash(git diff:*), Bash(git log:*), Bash(git push:*), Bash(git branch:*), Bash(git remote:*)
+description: Create well-structured git commits with automatic splitting analysis and auto-push to remote. Use when committing changes, creating commits, or needing to decide whether to split changes into multiple commits. Automatically pushes to the tracking remote after committing. Triggers on "commit changes", "create commit", "stage and commit", or "commit work".
 ---
 
 # Commit Skill
@@ -205,7 +205,22 @@ git commit -m "feat(ui): implement dark mode toggle with styles"
 2. **Analyze Changes**: Categorize by type and concern
 3. **Decide Strategy**: Single or multiple commits
 4. **Execute**: Stage and commit in logical order
-5. **Verify**: Confirm commits created successfully
+5. **Push**: Auto-push to tracking remote
+6. **Verify**: Confirm commits and push completed successfully
+
+## Auto-Push
+
+After all commits are created successfully, automatically push to the tracking remote:
+
+```bash
+# Get current branch
+BRANCH=$(git branch --show-current)
+
+# Push to origin with upstream tracking
+git push -u origin $BRANCH
+```
+
+If push fails (e.g. no remote, authentication error), report the error but do not treat it as a commit failure — the commits are already saved locally.
 
 ## Best Practices
 

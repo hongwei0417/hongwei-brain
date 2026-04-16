@@ -1,14 +1,14 @@
 ---
 name: create-pr
-allowed-tools: Bash(git:*), mcp__gitlab__create_merge_request, mcp__gitlab__get_project, AskUserQuestion
-description: Create GitLab Merge Request with automatic fork detection. Handles both same-project MR and cross-project MR (fork to upstream) via GitLab MCP. Supports custom target branch selection. Triggers on "create pr", "create mr", "merge request", "submit pr", or "push and create pr".
+allowed-tools: Bash(git:*), Skill, mcp__gitlab__create_merge_request, mcp__gitlab__get_project, AskUserQuestion
+description: Create GitLab Merge Request with automatic fork detection. Automatically runs create-branch and commit skills before MR creation — no confirmation needed for those steps. When an upstream remote exists, auto-detects the target branch (e.g. main → upstream/main, nos-v6.0-develop → upstream/nos-v6.0-develop) without asking. Triggers on "create pr", "create mr", "merge request", "submit pr", or "push and create pr".
 ---
 
 # Create PR Skill (GitLab)
 
 ## Overview
 
-Create GitLab Merge Request with automatic fork detection. Uses GitLab MCP for both same-project and cross-project (fork → upstream) MR creation. Allows custom target branch selection.
+End-to-end flow: **create-branch → commit → push → create MR**. The first two steps run automatically via their respective skills. MR target branch is auto-resolved when an `upstream` remote is detected.
 
 ## When to Use
 
@@ -18,13 +18,39 @@ Create GitLab Merge Request with automatic fork detection. Uses GitLab MCP for b
 
 ## Parameters (Optional)
 
-This skill accepts the following optional parameters when invoked:
-
-- **issue_tracker_base_url** — Issue tracker base URL (e.g. `https://myteam.atlassian.net`, `https://gitlab.com/group/project/-/issues`). When provided, extracted issue keys will be rendered as clickable links. If not provided and issue keys are found, the skill will ask the user for the URL.
+- **issue_tracker_base_url** — Issue tracker base URL (e.g. `https://myteam.atlassian.net`). When provided, extracted issue keys are rendered as clickable links. If not provided and issue keys are found, ask the user for the URL.
 
 ## Process
 
-### 1. Analyze Repository State
+### 1. Pre-Flight: Branch and Commit
+
+Execute these two steps automatically — do not ask for confirmation.
+
+#### 1a. Ensure Feature Branch
+
+Check the current branch:
+
+```bash
+git branch --show-current
+```
+
+If on a mainline branch (`main`, `master`, `develop`, or any branch matching `nos-v*/develop`, `nos-v*/main`), invoke the `moxa:create-branch` skill to create a feature branch. Pass it the context of current changes so it can generate an appropriate branch name.
+
+If already on a feature/fix/refactor/etc. branch, skip this step.
+
+#### 1b. Commit Uncommitted Changes
+
+Check for uncommitted changes:
+
+```bash
+git status --porcelain
+```
+
+If there are staged or unstaged changes (non-empty output), invoke the `moxa:commit` skill to analyze and commit them. Pass along `issue_tracker_base_url` if provided.
+
+If the working tree is clean (no changes), skip this step.
+
+### 2. Analyze Repository State
 
 ```bash
 # Current branch
@@ -40,48 +66,59 @@ git rev-parse --abbrev-ref @{upstream} 2>/dev/null || echo "No upstream"
 git remote get-url upstream 2>/dev/null || echo "No upstream remote"
 ```
 
-### 2. Detect Fork Scenario
+### 3. Detect Fork and Resolve Target Branch
 
-**Check for fork scenario:**
+**Extract remote URLs:**
 
 ```bash
-# Get origin URL
 ORIGIN_URL=$(git remote get-url origin)
-
-# Check if upstream exists
 UPSTREAM_URL=$(git remote get-url upstream 2>/dev/null)
 ```
 
-**Scenario A: Same Project (No Fork)**
-- Only `origin` remote exists
-- Use `mcp__gitlab__create_merge_request` with `project_id` only
+#### Scenario A: Fork Detected (upstream remote exists) — Auto-resolve
 
-**Scenario B: Fork (origin → upstream)**
-- Both `origin` and `upstream` remotes exist
-- Use `mcp__gitlab__create_merge_request` with `project_id` (source) + `target_project_id` (upstream)
+When both `origin` and `upstream` remotes exist, determine the target branch automatically:
 
-### 3. Collect MR Settings
+1. **Find the base branch** — the branch the current feature branch was created from:
+   ```bash
+   # Method 1: Check tracking branch
+   git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|^origin/||'
 
-**If fork detected, ask for target remote:**
-```
-偵測到 Fork 場景。請選擇 MR 目標 Remote：
+   # Method 2: If no tracking, find nearest common ancestor with known branches
+   git branch -r --list 'origin/*' | sed 's|origin/||' | while read branch; do
+     echo "$(git merge-base --octopus HEAD origin/$branch 2>/dev/null | head -c 8) $branch"
+   done | sort -rn | head -5
+   ```
 
-1. origin (自己的專案)
-2. upstream (原始專案)
-```
+2. **Map to upstream target** — the base branch name maps directly:
+   - `main` → target `main` on upstream
+   - `nos-v6.0-develop` → target `nos-v6.0-develop` on upstream
+   - `develop` → target `develop` on upstream
 
-**Ask for target branch:**
+3. **Verify the target branch exists on upstream:**
+   ```bash
+   git ls-remote --heads upstream <target_branch>
+   ```
+   If it does not exist, fall back to asking the user.
+
+4. **Set MR parameters:**
+   - Target remote: `upstream`
+   - Target branch: the resolved base branch
+   - MR type: cross-project (`project_id` + `target_project_id`)
+
+**Do not ask for target remote or target branch** — proceed directly with the auto-resolved values.
+
+#### Scenario B: Same Project (no upstream remote) — Ask
+
+Only `origin` remote exists. Ask the user for the target branch:
 
 First, detect possible target branches:
 ```bash
-# Get the branch this was created from
-PARENT_BRANCH=$(git log --pretty=format:'%D' | grep -o 'origin/[^,)]*' | head -1 | sed 's|origin/||')
-
-# List common target branches
-git branch -r | grep -E 'origin/(main|master|develop)' | sed 's|origin/||'
+PARENT_BRANCH=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|^origin/||')
+git branch -r | grep -E 'origin/(main|master|develop)' | sed 's|origin/||' | xargs
 ```
 
-Then ask user:
+Then ask:
 ```
 請選擇合併目標分支：
 
@@ -93,10 +130,9 @@ Then ask user:
 
 ### 4. Push Branch
 
-Ensure branch is pushed to remote:
+Ensure the branch is pushed to origin:
 
 ```bash
-# Push with upstream tracking
 git push -u origin $(git branch --show-current)
 ```
 
@@ -105,17 +141,17 @@ git push -u origin $(git branch --show-current)
 #### 5a. Gather Data
 
 ```bash
-TARGET_BRANCH=<user selected target>
+TARGET_BRANCH=<resolved target>
 CURRENT_BRANCH=$(git branch --show-current)
-MERGE_BASE=$(git merge-base origin/$TARGET_BRANCH $CURRENT_BRANCH)
+MERGE_BASE=$(git merge-base origin/$TARGET_BRANCH $CURRENT_BRANCH 2>/dev/null || git merge-base upstream/$TARGET_BRANCH $CURRENT_BRANCH)
 
-# Commit messages for understanding changes
+# Commit messages
 git log --no-merges --format='%h %s' $MERGE_BASE..$CURRENT_BRANCH
 
-# Full commit bodies (may contain issue references or URLs)
+# Full commit bodies (may contain issue references)
 git log --no-merges --format='%h %s%n%b' $MERGE_BASE..$CURRENT_BRANCH
 
-# Diff for understanding scope and details
+# Diff for understanding scope
 git diff $MERGE_BASE..$CURRENT_BRANCH
 git diff --stat $MERGE_BASE..$CURRENT_BRANCH
 ```
@@ -131,7 +167,7 @@ git diff --stat $MERGE_BASE..$CURRENT_BRANCH
 
 Scan all commit subjects and bodies for references:
 
-1. **Full URLs** — Match any `https?://...` URLs directly (e.g. `https://gitlab.com/group/project/-/issues/42`)
+1. **Full URLs** — Match any `https?://...` URLs directly
 2. **Issue keys** — Match patterns like `[A-Z]+-\d+` (e.g. `PROJ-123`), `#\d+` (e.g. `#42`)
 
 Deduplicate all extracted references, then:
@@ -143,24 +179,19 @@ Deduplicate all extracted references, then:
 
 #### 5d. Generate Description
 
-Analyze the diff content and commit messages, then generate the MR description using this template:
+Analyze the diff content and commit messages, then generate:
 
 ```markdown
 ## 📋 Summary
 
-<!-- 1-2 sentence high-level overview of the MR purpose, generated from analyzing commits + diff -->
+<!-- 1-2 sentence overview of the MR purpose -->
 
 ## ✨ Changes
 
-<!-- Each bullet = one logical change, with a contextual emoji prefix.
-     Derived from analyzing the actual diff content and commit messages.
-     Group related changes together. Each bullet should be human-readable
-     and explain WHAT changed and WHY, not just list file names. -->
+<!-- Each bullet = one logical change with contextual emoji prefix -->
 
 - 🔐 加入使用者登入 API endpoint，支援 email/password 認證
 - ✅ 新增登入流程的單元測試與整合測試
-- 🗑️ 移除已棄用的舊版認證模組
-- 📝 更新 API 文件，補充認證相關說明
 
 ## 🧪 Test Plan
 
@@ -168,60 +199,53 @@ Analyze the diff content and commit messages, then generate the MR description u
 
 ## 🔗 Related Issues
 
-<!-- 從 commit messages 中自動擷取 issue references 和 URLs，無任何 references 則省略此區塊 -->
+<!-- Auto-extracted from commits; omit if none found -->
 - [PROJ-123](https://myteam.atlassian.net/browse/PROJ-123)
-- [#42](https://gitlab.com/group/project/-/issues/42)
-- https://some-tracker.com/ticket/789
 ```
 
-**Emoji 使用原則：**
+**Emoji guide:**
 
-| Emoji | 適用情境 |
+| Emoji | Context |
 |-------|---------|
-| ✨ | 新功能 |
-| 🐛 | Bug 修復 |
-| ♻️ | 重構 |
-| 🗑️ | 移除程式碼/檔案 |
-| 📝 | 文件更新 |
-| ✅ | 測試新增/修改 |
-| 🔐 | 安全性/認證相關 |
-| ⚡ | 效能改善 |
-| 🎨 | UI/樣式調整 |
-| 🔧 | 設定/配置變更 |
-| 📦 | 依賴/套件變更 |
-| 🏗️ | 架構調整 |
-
-**Key design points:**
-- **Summary** — 分析 diff + commits 後寫出 1-2 句概述，說明這個 MR 的整體目的
-- **Changes** — 逐一分析每個邏輯改動，寫成人類可讀的 bullet point，每項搭配最適合的 emoji。描述改了什麼、為什麼改，而非列出檔案名稱
-- **Related Issues** — 自動從 commits 擷取 issue keys（`PROJ-123`, `#42`）和完整 URLs，搭配 `issue_tracker_base_url` 產生連結；無任何 references 則省略此區塊
+| ✨ | New feature |
+| 🐛 | Bug fix |
+| ♻️ | Refactor |
+| 🗑️ | Remove code/files |
+| 📝 | Documentation |
+| ✅ | Tests |
+| 🔐 | Security/auth |
+| ⚡ | Performance |
+| 🎨 | UI/style |
+| 🔧 | Config |
+| 📦 | Dependencies |
+| 🏗️ | Architecture |
 
 ### 6. Extract Project Identifiers
 
-**Extract project path from git remote URL:**
-
 ```bash
 # Extract project path (supports both SSH and HTTPS URLs)
-# git@gitlab.com:user/repo.git → user/repo
-# https://gitlab.com/user/repo.git → user/repo
 ORIGIN_PROJECT=$(git remote get-url origin | sed -E 's|.*[:/]([^/]+/[^/]+)(\.git)?$|\1|' | sed 's|\.git$||')
 ```
 
-**For fork scenario, also extract upstream project path:**
+For fork scenario, also extract upstream project path and resolve its numeric ID:
 
 ```bash
 UPSTREAM_PROJECT=$(git remote get-url upstream | sed -E 's|.*[:/]([^/]+/[^/]+)(\.git)?$|\1|' | sed 's|\.git$||')
 ```
 
-**Resolve numeric project IDs using `mcp__gitlab__get_project`:**
+Call `mcp__gitlab__get_project` with URL-encoded upstream project path to get its numeric `id` for `target_project_id`.
 
-For cross-project MR, call `mcp__gitlab__get_project` with the URL-encoded upstream project path to get its numeric `id`. This is needed for the `target_project_id` parameter.
+**Important:** The project path for GitLab MCP must include the full namespace. If `git remote get-url` returns a deeply nested path (e.g. `moxa/sw/switch/general/linuxframework/one-ui`), use the full path — not just the last two segments.
+
+```bash
+# For deeply nested GitLab groups, extract the full path after the host
+ORIGIN_PROJECT=$(git remote get-url origin | sed -E 's|.*gitlab\.com[:/](.+?)(\.git)?$|\1|' | sed 's|\.git$||')
+UPSTREAM_PROJECT=$(git remote get-url upstream 2>/dev/null | sed -E 's|.*gitlab\.com[:/](.+?)(\.git)?$|\1|' | sed 's|\.git$||')
+```
 
 ### 7. Create MR via GitLab MCP
 
 #### Scenario A: Same Project
-
-Use `mcp__gitlab__create_merge_request`:
 
 ```
 project_id: <origin project path, URL-encoded>
@@ -233,13 +257,11 @@ description: <generated description>
 
 #### Scenario B: Cross Project (Fork)
 
-Use `mcp__gitlab__create_merge_request`:
-
 ```
-project_id: <origin project path, URL-encoded (source/fork)>
-target_project_id: <upstream numeric project ID from mcp__gitlab__get_project>
+project_id: <origin project path, URL-encoded>
+target_project_id: <upstream numeric project ID>
 source_branch: <current branch>
-target_branch: <user selected target branch>
+target_branch: <auto-resolved target branch>
 title: <generated title>
 description: <generated description>
 ```
@@ -249,26 +271,18 @@ description: <generated description>
 After MR creation, report:
 - MR URL
 - MR number
-- Source branch
-- Target branch
+- Source branch → Target branch
 - Target remote (origin or upstream)
+- Commits included
 
-## Target Branch Selection
+## Auto-Resolution Summary
 
-The skill supports flexible target branch selection:
-
-| Scenario | Default Target | User Can Select |
-|----------|---------------|-----------------|
-| Feature branch | main | Any branch |
-| Hotfix | main | production, main |
-| Release | develop | main, release/* |
-| From fork | upstream/main | Any upstream branch |
-
-**Common patterns:**
-- `feature/*` → `develop` or `main`
-- `fix/*` → `main` or the branch it was created from
-- `hotfix/*` → `main` and `production`
-- `release/*` → `main`
+| Condition | Branch | Target Remote | Target Branch | Ask User? |
+|-----------|--------|--------------|---------------|-----------|
+| upstream exists | feature/* off main | upstream | main | No |
+| upstream exists | feature/* off nos-v6.0-develop | upstream | nos-v6.0-develop | No |
+| upstream exists | target not found on upstream | upstream | — | Yes (fallback) |
+| no upstream | any | origin | — | Yes |
 
 ## Error Handling
 
@@ -284,35 +298,10 @@ The skill supports flexible target branch selection:
 git remote add upstream <upstream-url>
 ```
 
-## Examples
-
-**Same Project MR to main:**
+**Target branch not found on upstream:**
 ```
-Branch: feature/add-auth
-Target: main
-Method: GitLab MCP (project_id only)
-Result: !123 https://gitlab.com/user/repo/-/merge_requests/123
+自動偵測的目標分支 <branch> 在 upstream 上不存在。
+請選擇目標分支：
+1. <list of upstream branches>
+2. 自訂輸入
 ```
-
-**Same Project MR to develop:**
-```
-Branch: feature/add-auth
-Target: develop (user selected)
-Method: GitLab MCP (project_id only)
-Result: !124 https://gitlab.com/user/repo/-/merge_requests/124
-```
-
-**Cross-Project MR (Fork) to custom branch:**
-```
-Source: user/repo-fork (feature/add-auth)
-Target: original/repo (release/v2.0)
-Method: GitLab MCP (project_id + target_project_id)
-Result: !456 https://gitlab.com/original/repo/-/merge_requests/456
-```
-
-## Integration Note
-
-When called from `/git-flow`:
-- Receives target remote and target branch settings from first phase
-- Branch should already be created and pushed
-- Reports MR URL as final workflow output
