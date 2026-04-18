@@ -1,7 +1,7 @@
 {
 	"name": "moxa",
-	"version": "2.1.0",
-	"description": "Integrated Git workflow plugin providing create-branch → commit → create-pr flow, cherry-pick sync across branches, OpenSpec directory sync, and unified GitLab MCP integration",
+	"version": "2.3.0",
+	"description": "Integrated Git workflow plugin providing create-branch → commit → create-pr flow, cherry-pick sync across branches, OpenSpec directory sync, switch web functional testing, and unified GitLab MCP integration",
 	"author": {
 		"name": "Kevin Hu",
 		"email": "iamhongwei0417@gmail.com"
