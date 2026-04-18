@@ -188,10 +188,10 @@ Analyze the diff content and commit messages, then generate:
 
 ## ✨ Changes
 
-<!-- Each bullet = one logical change with contextual emoji prefix -->
+<!-- One bullet per logical change. Do NOT prefix bullets with emoji — the section header's emoji is sufficient. Stacking emoji on every line is visual noise and makes the description harder to scan. -->
 
-- 🔐 加入使用者登入 API endpoint，支援 email/password 認證
-- ✅ 新增登入流程的單元測試與整合測試
+- 加入使用者登入 API endpoint，支援 email/password 認證
+- 新增登入流程的單元測試與整合測試
 
 ## 🧪 Test Plan
 
@@ -203,22 +203,7 @@ Analyze the diff content and commit messages, then generate:
 - [PROJ-123](https://myteam.atlassian.net/browse/PROJ-123)
 ```
 
-**Emoji guide:**
-
-| Emoji | Context |
-|-------|---------|
-| ✨ | New feature |
-| 🐛 | Bug fix |
-| ♻️ | Refactor |
-| 🗑️ | Remove code/files |
-| 📝 | Documentation |
-| ✅ | Tests |
-| 🔐 | Security/auth |
-| ⚡ | Performance |
-| 🎨 | UI/style |
-| 🔧 | Config |
-| 📦 | Dependencies |
-| 🏗️ | Architecture |
+**Section headers are fixed** — always use `## 📋 Summary`, `## ✨ Changes`, `## 🧪 Test Plan`, `## 🔗 Related Issues`. Don't substitute the header emoji per MR type (e.g. don't swap `✨ Changes` for `🐛 Changes` on a bug-fix MR); keeping them stable lets reviewers scan consistent structure across MRs.
 
 ### 6. Extract Project Identifiers
 
