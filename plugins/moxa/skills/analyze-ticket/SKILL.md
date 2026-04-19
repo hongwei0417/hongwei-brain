@@ -1,7 +1,7 @@
 ---
 name: analyze-ticket
-allowed-tools: Grep, Glob, Read, AskUserQuestion, Skill, Bash(git status:*), Bash(git branch:*), mcp__mcp-atlassian__jira_get_issue, mcp__mcp-atlassian__jira_search, mcp__mcp-atlassian__jira_get_issue_link_types, mcp__mcp-atlassian__jira_get_link_type, mcp__mcp-atlassian__confluence_get_page, mcp__mcp-atlassian__confluence_search
-description: Jira-ticket analysis skill for the switch codebase (apps/switch, libs/switch). Fetches one or more Jira tickets via mcp-atlassian, produces a requirements digest, searches the Angular/TypeScript codebase for related functionality, and confirms the expected direction and scope of changes with the user. Stops after direction is locked in — does NOT write plans or code. At the end, classifies the work (bug / 既有功能擴充 / 全新功能), recommends a best-fit downstream tool (/gsd-quick, superpowers, feature-dev, or openspec) with rationale, and invokes it directly after the user confirms. Use whenever the user hands over Jira ticket links and asks to "analyze this ticket", "understand this Jira", "check what this ticket means", "先分析這張票", or similar phrasing.
+allowed-tools: Grep, Glob, Read, Write, AskUserQuestion, Skill, Bash(git status:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(mkdir:*), Bash(date:*), mcp__mcp-atlassian__jira_get_issue, mcp__mcp-atlassian__jira_search, mcp__mcp-atlassian__jira_get_issue_link_types, mcp__mcp-atlassian__jira_get_link_type, mcp__mcp-atlassian__confluence_get_page, mcp__mcp-atlassian__confluence_search
+description: Jira-ticket analysis skill for the switch codebase (apps/switch, libs/switch). Fetches one or more Jira tickets via mcp-atlassian, produces a requirements digest, searches the Angular/TypeScript codebase for related functionality, and confirms the expected direction and scope of changes with the user. After direction is locked in, writes a persistent Markdown analysis report to `.analyze-ticket/<KEY>.md` at the repo root so downstream tools and future sessions can read the findings without re-deriving them. Stops after the report is written and direction is confirmed — does NOT write plans or code. Finally classifies the work (bug / 既有功能擴充 / 全新功能), recommends a best-fit downstream tool (/gsd-quick, superpowers, feature-dev, or openspec) with rationale, and invokes it directly after the user confirms. Use whenever the user hands over Jira ticket links and asks to "analyze this ticket", "understand this Jira", "check what this ticket means", "先分析這張票", or similar phrasing.
 ---
 
 # Analyze Ticket Skill
@@ -10,7 +10,7 @@ description: Jira-ticket analysis skill for the switch codebase (apps/switch, li
 
 This skill turns one or more Jira tickets into a **confirmed understanding** of what the work is and roughly where it lives in the `switch` codebase. It is deliberately scoped to the *analysis* phase only — it does not write an implementation plan and it does not touch code.
 
-The goal is to bridge **ticket context ↔ codebase reality** with the user kept in the loop at one hard checkpoint: **direction confirmation**. Once the direction is locked in, the skill classifies the work, recommends a downstream orchestration tool (`/gsd-quick`, `superpowers`, `feature-dev`, `openspec`, or manual), and — on the user's confirmation — invokes the chosen tool directly.
+The goal is to bridge **ticket context ↔ codebase reality** with the user kept in the loop at one hard checkpoint: **direction confirmation**. Once the direction is locked in, the skill persists the analysis to `.analyze-ticket/<KEY>.md` at the repo root — a Markdown snapshot that captures *where* to modify and *which direction* to take — then classifies the work, recommends a downstream orchestration tool (`/gsd-quick`, `superpowers`, `feature-dev`, `openspec`, or manual), and — on the user's confirmation — invokes the chosen tool directly. The report is the lasting artefact of this skill: downstream tools read it instead of re-parsing the ticket, and future sessions can recover the analysis without re-running everything.
 
 Why split this out: Jira tickets are notoriously under-specified. Most wasted implementation cycles come from planning against a misread ticket, not from bad coding. Front-loading ticket analysis and codebase grounding — without prematurely committing to a planning framework — keeps downstream tools working on the *right* problem and lets the user pick the workflow that fits the task.
 
@@ -97,6 +97,80 @@ Then **stop and ask the user**. Use `AskUserQuestion` if the decision space is d
 
 If the user's feedback reveals the ticket scope is wrong (e.g. they want something outside your search area), loop back: re-search with new keywords, update the direction report, re-confirm.
 
+### Phase 3.5 — Persist Analysis Report 📄
+
+After the direction is confirmed in Phase 3, write the analysis to disk as a Markdown report. This is the durable artefact of the skill — downstream tools, future sessions, and the user themselves will read this file rather than re-deriving the analysis from the ticket.
+
+Do this *after* the user confirms in Phase 3 and *before* recommending a tool in Phase 4. If you skip the report, Phase 4's handoff loses the thing the downstream tool is supposed to act on.
+
+#### Location & filename
+
+1. Resolve the repo root with `git rev-parse --show-toplevel`. Report directory is `<repo-root>/.analyze-ticket/`. Create it if missing: `mkdir -p <repo-root>/.analyze-ticket`.
+2. Filename is the ticket key(s) joined with `_`, suffixed `.md`. **Sort the keys alphabetically** so `PROJ-123` + `PROJ-456` always produces the same path regardless of the order the user typed them — re-running the analysis on the same tickets must hit the same file.
+   - Single ticket: `PROJ-123.md`
+   - Multiple: `PROJ-123_PROJ-456.md`
+3. If the file already exists, **overwrite it**. Re-running analysis is meant to produce an updated snapshot, not a stack of history.
+
+#### Report template
+
+Use this exact structure. If a phase produced nothing for a section, keep the heading and write `（無）` underneath — the shape stays predictable across tickets, which is what makes downstream tools able to read it mechanically.
+
+```markdown
+# 分析報告 — <TICKET-KEYS>
+
+> 產生時間：<YYYY-MM-DD HH:MM>
+> Jira 連結：
+> - <URL 1>
+> - <URL 2>
+
+## 需求摘要
+
+<Phase 1 digest — 每張票的 問題/目標、驗收條件、關鍵字，加上 綜合觀察>
+
+## 相關功能 / 模組
+
+<Phase 3 發現。每一條含檔案路徑 + 行號（若有）+ 一句話說明為何相關。
+讀這份報告的人光看這一段，就要能回答「要動哪裡」。>
+
+- `apps/switch/src/app/.../foo.component.ts:120` — 負責 X，對應 PROJ-123 的 Y 需求
+- `libs/switch/data-access/.../bar.service.ts:45` — 提供 Z 的 API 呼叫，Phase 1 digest 中的錯誤訊息來自這裡
+
+## 預期修改範圍
+
+### 需要修改
+- `<path>` — <一句話理由>
+
+### 可能需要新增
+- <檔案類型，大概位置，用途>
+
+### 單純參考（不會動）
+- `<path>` — <為何值得看但不會動>
+
+## 已確認方向
+
+<使用者在 Phase 3 checkpoint 確認的方向。用一段話寫，不是條列。
+包含 checkpoint 討論中浮出的 clarification — 例如「沿用既有的 DeviceSwitchService，不新增新的 data-access 層」、「只改 MDS-L2，RKS 不在這張票範圍」。
+這段是下游工具會拿來當 task description 的核心。>
+
+## 開放問題 / 後續追蹤
+
+<雙方同意延後的議題 — 不是動手阻礙，但值得記下。沒有就寫「（無）」。>
+```
+
+#### After writing
+
+Write the file with the `Write` tool. Then tell the user in one line, e.g.:
+
+```
+📄 已產生分析報告：.analyze-ticket/PROJ-123.md
+```
+
+Do **not** paste the full report back into the chat — it's redundant with what you already showed in Phase 3, and the user will open the file themselves if they want to read it. Keep the announcement to the one line above, then move on to Phase 4.
+
+#### Gitignore note
+
+`.analyze-ticket/` lives in the target repo (e.g. `switch`), not in this plugin. If the user wants the reports gitignored, that's their repo's gitignore to manage — mention it in passing if they ask, but don't modify their `.gitignore` unprompted.
+
 ### Phase 4 — Recommend & Hand Off
 
 Once direction is confirmed, **do not** open an undifferentiated menu of tools. Classify the task, recommend one specific tool with a reason, and ask the user to confirm or override. Users push back more productively on a concrete suggestion than on a blank field — and the classification forces you to justify the handoff instead of defaulting to whatever was used last time.
@@ -151,7 +225,7 @@ Never proceed on the recommendation alone. Offer these options, in this order:
 
 #### Step 4.5 — Execute the handoff
 
-Route on the user's answer — no extra confirmation round; they already confirmed at 4.4. Pass the requirements digest (Phase 1) + direction report (Phase 3, including confirmed option and relevant files) + any resolutions from the checkpoint along with every handoff.
+Route on the user's answer — no extra confirmation round; they already confirmed at 4.4. Pass **the report path** from Phase 3.5 (e.g. `.analyze-ticket/PROJ-123.md`) as the primary handoff artefact, alongside the requirements digest (Phase 1) + direction report (Phase 3, including confirmed option and relevant files) + any resolutions from the checkpoint. Telling the downstream tool to read the report file is more reliable than pasting a long block of context into the prompt — the file is the source of truth, the prompt is just a pointer.
 
 - **`/gsd-quick`** — Invoke via the `Skill` tool (`skill: "gsd-quick"`), passing the direction report as the task description so the quick executor has the full context.
 - **`superpowers`** — Invoke `superpowers:brainstorming` first to pressure-test the confirmed direction against edge cases, then `superpowers:writing-plans`. Execution (`superpowers:executing-plans`) runs later once the plan is ready.
